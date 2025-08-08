@@ -1,0 +1,67 @@
+export type LoginResponse = {
+  accessToken: string
+  user: { id: string; email: string; name: string; tenantId: string; role: string }
+}
+
+const getBaseUrl = () => {
+  const base = process.env.NEXT_PUBLIC_API_BASE_URL
+  if (!base) throw new Error('NEXT_PUBLIC_API_BASE_URL is not set')
+  return base.replace(/\/$/, '')
+}
+
+export function getAuthToken(): string | null {
+  if (typeof window === 'undefined') return null
+  return localStorage.getItem('andi_token')
+}
+
+export function setAuthToken(token: string) {
+  if (typeof window === 'undefined') return
+  localStorage.setItem('andi_token', token)
+}
+
+export function clearAuthToken() {
+  if (typeof window === 'undefined') return
+  localStorage.removeItem('andi_token')
+}
+
+export async function apiFetch<T = any>(path: string, init?: RequestInit): Promise<T> {
+  const base = getBaseUrl()
+  const token = getAuthToken()
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...(init?.headers as any),
+  }
+  if (token) headers['Authorization'] = `Bearer ${token}`
+
+  const res = await fetch(`${base}${path}`, { ...init, headers })
+  const isJson = res.headers.get('content-type')?.includes('application/json')
+  if (!res.ok) {
+    const body = isJson ? await res.json().catch(() => ({})) : await res.text()
+    const message = (body as any)?.message || (typeof body === 'string' ? body : 'Request failed')
+    throw new Error(message)
+  }
+  return (isJson ? await res.json() : (await res.text())) as any
+}
+
+export async function login(email: string, password: string) {
+  const data = await apiFetch<LoginResponse>('/api/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({ email, password }),
+  })
+  setAuthToken(data.accessToken)
+  return data
+}
+
+export async function registerAdmin(input: {
+  companyName: string
+  companySlug: string
+  adminEmail: string
+  adminName: string
+  adminPassword: string
+  plan?: string
+}) {
+  return apiFetch('/api/auth/register-admin', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  })
+}

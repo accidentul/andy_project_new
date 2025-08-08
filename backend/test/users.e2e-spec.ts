@@ -1,0 +1,57 @@
+import { INestApplication, ValidationPipe } from '@nestjs/common'
+import { Test } from '@nestjs/testing'
+import { AppModule } from '../src/app.module'
+import request from 'supertest'
+
+describe('Users E2E', () => {
+  let app: INestApplication
+  let token: string
+
+  beforeAll(async () => {
+    process.env.DATABASE_PATH = ':memory:'
+    const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile()
+    app = moduleRef.createNestApplication()
+    app.setGlobalPrefix('api')
+    app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }))
+    await app.init()
+
+    // onboard admin
+    await request(app.getHttpServer())
+      .post('/api/auth/register-admin')
+      .send({
+        companyName: 'Acme',
+        companySlug: 'acme',
+        adminEmail: 'admin@acme.com',
+        adminName: 'Admin',
+        adminPassword: 'Str0ngPassword',
+      })
+      .expect(201)
+
+    const loginRes = await request(app.getHttpServer())
+      .post('/api/auth/login')
+      .send({ email: 'admin@acme.com', password: 'Str0ngPassword' })
+      .expect(200)
+    token = loginRes.body.accessToken
+  })
+
+  afterAll(async () => {
+    await app.close()
+  })
+
+  it('lists roles and creates a new role', async () => {
+    const rolesRes = await request(app.getHttpServer())
+      .get('/api/users/roles')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200)
+
+    expect(Array.isArray(rolesRes.body)).toBe(true)
+
+    const createRoleRes = await request(app.getHttpServer())
+      .post('/api/users/roles')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ name: 'analyst', permissionKeys: ['crm.read', 'analytics.view'] })
+      .expect(201)
+
+    expect(createRoleRes.body.name).toBe('analyst')
+  })
+})

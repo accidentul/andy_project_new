@@ -1,0 +1,53 @@
+### Cursor Rules for This Project (+5)
+
+- **Always build real implementations**
+  - No mock/stub/fake data, services, or in-memory placeholders in production code.
+  - If an external service is not available, implement a minimal real local alternative (e.g., a lightweight DB or filesystem-backed store) rather than mocks.
+  - Do not hardcode sample responses; wire actual data flows end-to-end.
+
+- **Dedicated backend (NestJS)**
+  - All business logic and data persistence live in a separate NestJS service.
+  - The Next.js app is a pure frontend that consumes the NestJS API via HTTP.
+  - Configure the backend base URL with `NEXT_PUBLIC_API_BASE_URL` in `.env.local` and never hardcode URLs.
+  - Do not add server routes under `app/api/**` unless strictly needed for proxying or auth; prefer calling the NestJS API directly.
+  - Contract-first: define DTOs/schemas shared between frontend and backend where feasible (e.g., generated types or a shared package).
+
+- **API-first workflow (strict order of work)**
+  1) Implement the API feature first in the NestJS backend (controllers/services/entities with real persistence and validation).
+  2) Immediately create tests for the API feature after implementation (e2e and unit where appropriate) in the backend.
+  3) Implement the frontend only if necessary, consuming the real API.
+
+- **Tests are mandatory for every feature**
+  - For every new feature or bug fix, add automated tests in the same change set.
+  - Prefer integration/e2e tests for API endpoints in the NestJS backend.
+  - Avoid mocking network calls and databases; use ephemeral/test databases or isolated storage per test.
+  - Include validation and error-path tests, not just happy paths.
+
+- **Quality bars**
+  - Strong typing and input validation (e.g., Zod/class-validator) for request/response contracts.
+  - No TODOs or commented-out/dead code.
+  - Meaningful error handling with appropriate HTTP status codes and messages.
+
+- **Data and secrets**
+  - Do not commit secrets. Use environment variables and document required vars.
+  - Provide seed or fixture scripts only for local/dev and behind explicit commands.
+
+- **Frontend constraints**
+  - UI must consume real API data from the NestJS backend. No placeholder/mock data in components.
+  - Loading states can use skeletons/spinners, but rendered content must come from real API calls.
+
+- **Process enforcement when using AI**
+  - If tests or API are missing for a requested feature, first implement the API in NestJS, then add tests, and only then proceed to UI.
+  - If tooling is missing (e.g., test runner), set it up as part of delivering the API feature and its tests.
+  - Do not skip tests even for small changes.
+
+- **Version control policy (auto-commit & push)**
+  - After each feature is implemented and all tests pass locally, automatically commit the changes with a concise message explaining the "why" and push to the repository.
+  - Commits must not include secrets or environment files.
+  - Do not create empty commits. If tests fail, do not commit/push; fix the failures first.
+
+- **Deliverables per feature**
+  - Backend implementation in NestJS with real data access.
+  - Tests for the backend API (unit where sensible, integration/e2e preferred).
+  - Frontend integration (only if required) wired to the real backend API.
+  - Minimal documentation notes for any new env vars or scripts.

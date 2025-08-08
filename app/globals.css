@@ -1,0 +1,150 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 240 17% 15%;
+    --foreground: 0 0% 100%;
+
+    --card: 240 17% 17%;
+    --card-foreground: 0 0% 100%;
+
+    --popover: 240 17% 17%;
+    --popover-foreground: 0 0% 100%;
+
+    --primary: 293 65% 55%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 240 17% 22%;
+    --secondary-foreground: 0 0% 100%;
+
+    --muted: 240 17% 22%;
+    --muted-foreground: 0 0% 70%;
+
+    --accent: 293 65% 55%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 240 17% 25%;
+    --input: 240 17% 25%;
+    --ring: 293 65% 55%;
+
+    --radius: 0.5rem;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-weight: 300; /* Montserrat Light for general text */
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6,
+  .card-title,
+  .section-title,
+  .chart-title {
+    font-weight: 400; /* Montserrat Regular for titles */
+  }
+}
+
+.sidebar-icon {
+  @apply h-5 w-5 text-white;
+}
+
+@keyframes shake {
+  0% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-5px);
+  }
+  50% {
+    transform: translateX(5px);
+  }
+  75% {
+    transform: translateX(-5px);
+  }
+  100% {
+    transform: translateX(0);
+  }
+}
+
+@keyframes float {
+  0% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-5px);
+  }
+  100% {
+    transform: translateY(0);
+  }
+}
+
+@keyframes pulse-border {
+  0% {
+    border-color: rgba(168, 85, 247, 0.4);
+  }
+  50% {
+    border-color: rgba(168, 85, 247, 0.8);
+  }
+  100% {
+    border-color: rgba(168, 85, 247, 0.4);
+  }
+}
+
+.animate-shake {
+  animation: shake 0.5s ease-in-out;
+}
+
+.animate-float {
+  animation: float 2s infinite ease-in-out;
+}
+
+.animate-pulse-border {
+  animation: pulse-border 2s infinite ease-in-out;
+}
+
+/* Smooth resize transition */
+.resize-transition {
+  transition: width 0.15s cubic-bezier(0.4, 0, 0.2, 1), height 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Custom dropdown styling */
+.dropdown-menu-item-outline {
+  @apply focus:bg-transparent focus:text-foreground focus:outline focus:outline-1 focus:outline-primary;
+}
+
+.dropdown-menu-item-outline-destructive {
+  @apply focus:bg-transparent focus:text-red-500 focus:outline focus:outline-1 focus:outline-red-500;
+}
+
+/* Animated gradient text */
+@keyframes gradient {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+.animate-gradient {
+  background-size: 300% 300%;
+  animation: gradient 8s ease infinite;
+}
+
