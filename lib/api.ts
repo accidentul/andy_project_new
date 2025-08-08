@@ -65,3 +65,45 @@ export async function registerAdmin(input: {
     body: JSON.stringify(input),
   })
 }
+
+export async function getMe() {
+  return apiFetch('/api/users/me')
+}
+
+export type Role = { id: string; name: string; permissions: Array<{ id: string; key: string }> }
+
+export async function listRoles(): Promise<Role[]> {
+  return apiFetch('/api/users/roles')
+}
+
+export async function createRole(input: { name: string; permissionKeys: string[] }) {
+  return apiFetch('/api/users/roles', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  })
+}
+
+export async function createUser(input: { email: string; name: string; password: string; roleId: string }) {
+  return apiFetch('/api/users/create', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  })
+}
+
+export type Connector = {
+  id: string
+  provider: 'salesforce' | 'hubspot'
+  active: boolean
+  createdAt: string
+}
+
+export async function listConnectors(): Promise<Connector[]> {
+  return apiFetch('/api/connectors')
+}
+
+export async function createConnector(input: { provider: 'salesforce' | 'hubspot'; credentials: any; active?: boolean }) {
+  return apiFetch('/api/connectors', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  })
+}
