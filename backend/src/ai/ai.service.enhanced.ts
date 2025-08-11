@@ -9,6 +9,7 @@ import { User } from '../users/user.entity'
 import { CrmAccount, CrmActivity, CrmContact, CrmDeal } from '../connectors/unified-crm.entities'
 import { RecursiveCharacterTextSplitter } from 'langchain/text_splitter'
 import { Document } from 'langchain/document'
+import { ToolAgent } from './agents/tool-agent'
 
 @Injectable()
 export class EnhancedAiService {
@@ -50,6 +51,11 @@ export class EnhancedAiService {
     query: string,
     conversationId?: string,
   ): Promise<AgentResponse> {
+    // Check if we should use the new tool agent
+    if (process.env.USE_TOOL_AGENT === 'true' || query.toLowerCase().includes('use tools')) {
+      return await this.processWithToolAgent(user, query, conversationId)
+    }
+    
     // Get or create conversation
     const convId = conversationId || `conv:${user.id}:${Date.now()}`
     
@@ -80,6 +86,80 @@ export class EnhancedAiService {
     const enhancedResponse = await this.enhanceWithRealTimeData(response, user)
     
     return enhancedResponse
+  }
+  
+  async processWithToolAgent(
+    user: User,
+    query: string,
+    conversationId?: string,
+  ): Promise<AgentResponse> {
+    const convId = conversationId || `conv:${user.id}:${Date.now()}`
+    const conversation = await this.getConversationHistory(convId)
+    
+    // Create tool agent with repositories
+    const toolAgent = new ToolAgent(
+      {
+        openAIApiKey: process.env.OPENAI_API_KEY!,
+        modelName: 'gpt-4-turbo-preview',
+        temperature: 0.7
+      },
+      this.accountRepo,
+      this.contactRepo,
+      this.dealRepo,
+      this.activityRepo,
+      user.tenant.id,
+      (user as any).roleTitle || user.role?.name || 'User'
+    )
+    
+    // Process with tool agent
+    const result = await toolAgent.processQuery(query, conversation)
+    
+    // Store conversation
+    await this.saveConversation(convId, query, result.output)
+    
+    // Return formatted response
+    return {
+      content: result.output,
+      actions: this.extractActionsFromTools(result.toolsUsed),
+      suggestions: [],
+      confidence: 0.9
+    }
+  }
+  
+  private extractActionsFromTools(toolsUsed: string[]): any[] {
+    const actions = []
+    
+    if (toolsUsed.includes('generate_board_presentation')) {
+      actions.push({
+        type: 'automation',
+        title: 'Board Presentation Generated',
+        description: 'Executive presentation has been created with current metrics',
+        impact: 'Ready for board meeting',
+        requiresApproval: false
+      })
+    }
+    
+    if (toolsUsed.includes('create_deal') || toolsUsed.includes('update_deal_stage')) {
+      actions.push({
+        type: 'automation',
+        title: 'CRM Updated',
+        description: 'Deal information has been modified in the system',
+        impact: 'Pipeline metrics updated',
+        requiresApproval: false
+      })
+    }
+    
+    if (toolsUsed.includes('export_data')) {
+      actions.push({
+        type: 'automation',
+        title: 'Data Exported',
+        description: 'Data has been exported to file',
+        impact: 'File ready for download',
+        requiresApproval: false
+      })
+    }
+    
+    return actions
   }
 
   private async getConversationHistory(conversationId: string): Promise<BaseMessage[]> {

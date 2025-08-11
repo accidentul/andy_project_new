@@ -52,8 +52,16 @@ class ActionDto {
   @IsString()
   description!: string
   
+  @IsString()
+  @IsOptional()
+  impact?: string
+  
+  @IsOptional()
+  requiresApproval?: boolean
+  
   @IsObject()
-  actionData!: any
+  @IsOptional()
+  actionData?: any
 }
 
 class ExecuteActionDto {

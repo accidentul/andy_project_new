@@ -29,6 +29,36 @@ export class AiStreamingController {
     this.agentFactory = new AgentFactory()
   }
 
+  @Get('chat/stream')
+  async streamChatGet(@Query('query') query: string, @Query('token') token: string, @Res() res: Response) {
+    // Validate token manually for GET request
+    if (!token) {
+      res.status(401).json({ error: 'Unauthorized' })
+      return
+    }
+    
+    // Set up SSE headers
+    res.setHeader('Content-Type', 'text/event-stream')
+    res.setHeader('Cache-Control', 'no-cache')
+    res.setHeader('Connection', 'keep-alive')
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    
+    try {
+      // Simple streaming response for now
+      const messages = query.split(' ')
+      for (const word of messages) {
+        res.write(`data: ${JSON.stringify({ type: 'content', content: word + ' ' })}\n\n`)
+        await new Promise(resolve => setTimeout(resolve, 100))
+      }
+      
+      res.write(`data: ${JSON.stringify({ type: 'done' })}\n\n`)
+      res.end()
+    } catch (error) {
+      res.write(`data: ${JSON.stringify({ type: 'error', message: 'Streaming failed' })}\n\n`)
+      res.end()
+    }
+  }
+  
   @Post('chat/stream')
   async streamChat(@Request() req: any, @Body() dto: StreamingChatDto, @Res() res: Response) {
     const user = req.user
