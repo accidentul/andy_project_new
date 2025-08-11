@@ -32,13 +32,11 @@ export default function LoginPage() {
     }
   }
 
-  const handleLoadComplete = () => {
+  // Immediately redirect on successful login, skip loading screen
+  if (isLoggedIn) {
     sessionStorage.setItem("fromLogin", "true")
     router.push("/")
-  }
-
-  if (isLoggedIn) {
-    return <LoadingScreen onLoadComplete={handleLoadComplete} />
+    return null
   }
 
   return (

@@ -15,6 +15,15 @@ export class User {
   @Column()
   name!: string
 
+  @Column({ nullable: true })
+  roleTitle?: string
+
+  @Column({ nullable: true })
+  department?: string
+
+  @Column({ nullable: true })
+  seniorityLevel?: string
+
   @Column()
   @Exclude()
   passwordHash!: string

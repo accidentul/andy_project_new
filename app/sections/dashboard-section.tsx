@@ -8,6 +8,7 @@ import { LineChart } from "../components/line-chart"
 import { BarChart } from "../components/bar-chart"
 import { AreaChart } from "../components/area-chart"
 import { Button } from "@/components/ui/button"
+import { getAiSuggestions, listConnectors, seedDemoCrm } from "@/lib/api"
 import { WidgetGrid } from "../components/widget-grid"
 import type { Widget } from "@/hooks/use-draggable-widgets"
 import { SmallWidget } from "../components/small-widget"
@@ -74,6 +75,54 @@ export default function DashboardSection({ subsidiary }: DashboardSectionProps) 
       order: 5,
     },
   ]
+
+  // AI Suggested widgets from backend CRM aggregation
+  const [aiWidgets, setAiWidgets] = useState<Widget[]>([])
+  const [aiWidgetData, setAiWidgetData] = useState<Record<string, any>>({})
+  
+  // Ensure demo data exists, then fetch AI suggestions
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        // Ensure at least one connector exists and seed demo data if needed
+        const connectors = await listConnectors().catch(() => [])
+        const connector = connectors[0]
+        if (connector) {
+          await seedDemoCrm(connector.id, connector.provider)
+          // seed extra volume
+          await seedDemoCrm(connector.id, connector.provider)
+        }
+
+        const res = await getAiSuggestions()
+        if (cancelled) return
+        
+        // Store the data for each widget
+        const dataMap: Record<string, any> = {}
+        res.suggestions.forEach((s) => {
+          dataMap[`ai-${s.id}`] = {
+            type: s.type,
+            data: s.data,
+            description: s.description
+          }
+        })
+        setAiWidgetData(dataMap)
+        
+        const widgets: Widget[] = res.suggestions.slice(0, 4).map((s, idx) => ({
+          id: `ai-${s.id}`,
+          title: s.title,
+          size: s.size === 'tiny' || s.size === 'small' ? 'small' : 'medium',
+          order: 100 + idx,
+        }))
+        setAiWidgets(widgets)
+      } catch (e) {
+        // ignore if AI backend not ready
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   // Get subsidiary-specific data
   const getSubsidiaryData = () => {
@@ -545,6 +594,130 @@ export default function DashboardSection({ subsidiary }: DashboardSectionProps) 
 
   // Render widget content based on widget ID
   const renderWidget = (widget: Widget) => {
+    // AI-suggested widget rendering with actual data
+    if (widget.id.startsWith('ai-')) {
+      const widgetInfo = aiWidgetData[widget.id]
+      
+      if (!widgetInfo || !widgetInfo.data) {
+        return (
+          <Card className="h-full w-full overflow-hidden">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">{widget.title}</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-xs text-muted-foreground">Loading...</div>
+            </CardContent>
+          </Card>
+        )
+      }
+
+      // Render based on widget type
+      if (widgetInfo.type === 'kpi') {
+        return (
+          <Card className="h-full w-full overflow-hidden">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm">{widget.title}</CardTitle>
+              <div className="text-xs text-muted-foreground">{widgetInfo.description}</div>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center justify-between">
+                <div className="text-2xl font-bold">
+                  {widget.title.includes('Pipeline') ? 
+                    `$${(widgetInfo.data.value / 1000000).toFixed(2)}M` : 
+                    widget.title.includes('Ratio') ?
+                    `${widgetInfo.data.value}%` :
+                    widgetInfo.data.value
+                  }
+                </div>
+                <div className="text-green-500">
+                  <ArrowUp className="h-4 w-4" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )
+      }
+
+      if (widgetInfo.type === 'line') {
+        const chartData = Array.isArray(widgetInfo.data) ? widgetInfo.data : []
+        return (
+          <Card className="h-full w-full overflow-hidden">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm">{widget.title}</CardTitle>
+              <div className="text-xs text-muted-foreground">{widgetInfo.description}</div>
+            </CardHeader>
+            <CardContent className="h-[200px]">
+              <LineChart 
+                data={chartData.map((item: any) => ({
+                  month: item.day ? new Date(item.day).toLocaleDateString('en', { month: 'short', day: 'numeric' }) : 'N/A',
+                  value: item.value || 0
+                }))}
+                height={180}
+                color="#c44ed9"
+              />
+            </CardContent>
+          </Card>
+        )
+      }
+
+      if (widgetInfo.type === 'bar') {
+        const chartData = Array.isArray(widgetInfo.data) ? widgetInfo.data : []
+        return (
+          <Card className="h-full w-full overflow-hidden">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm">{widget.title}</CardTitle>
+              <div className="text-xs text-muted-foreground">{widgetInfo.description}</div>
+            </CardHeader>
+            <CardContent className="h-[200px]">
+              <BarChart 
+                data={chartData.map((item: any) => ({
+                  month: item.stage || item.month || 'N/A',
+                  value: item.value || 0
+                }))}
+                height={180}
+                color="#c44ed9"
+              />
+            </CardContent>
+          </Card>
+        )
+      }
+
+      if (widgetInfo.type === 'area') {
+        const chartData = Array.isArray(widgetInfo.data) ? widgetInfo.data : []
+        return (
+          <Card className="h-full w-full overflow-hidden">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm">{widget.title}</CardTitle>
+              <div className="text-xs text-muted-foreground">{widgetInfo.description}</div>
+            </CardHeader>
+            <CardContent className="h-[200px]">
+              <AreaChart 
+                data={chartData.map((item: any) => ({
+                  month: item.month || 'N/A',
+                  value: item.value || 0
+                }))}
+                height={180}
+                color="#c44ed9"
+              />
+            </CardContent>
+          </Card>
+        )
+      }
+
+      // Fallback for unknown types
+      return (
+        <Card className="h-full w-full overflow-hidden">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">{widget.title}</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-xs text-muted-foreground">AI-suggested widget</div>
+            <div className="text-sm mt-2">{JSON.stringify(widgetInfo.data).slice(0, 100)}...</div>
+          </CardContent>
+        </Card>
+      )
+    }
+
     switch (widget.id) {
       case "performance-dashboard":
         return (
@@ -1013,7 +1186,7 @@ export default function DashboardSection({ subsidiary }: DashboardSectionProps) 
   return (
     <div className="bg-background dark:bg-gray-900">
       <WidgetGrid
-        initialWidgets={initialWidgets}
+        initialWidgets={[...initialWidgets, ...aiWidgets]}
         renderWidget={renderWidget}
         onCustomizeWidget={(widget) => {
           console.log("Customize widget:", widget.id)

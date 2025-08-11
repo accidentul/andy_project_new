@@ -1,0 +1,114 @@
+#0 building with "desktop-linux" instance using docker driver
+
+#1 [frontend internal] load build definition from Dockerfile
+#1 transferring dockerfile: 892B 0.0s done
+#1 DONE 0.0s
+
+#2 [frontend internal] load metadata for docker.io/library/node:20-alpine
+#2 ...
+
+#3 [frontend auth] library/node:pull token for registry-1.docker.io
+#3 DONE 0.0s
+
+#2 [frontend internal] load metadata for docker.io/library/node:20-alpine
+#2 DONE 1.7s
+
+#4 [frontend internal] load .dockerignore
+#4 transferring context: 2B done
+#4 DONE 0.0s
+
+#5 [frontend runner 1/7] FROM docker.io/library/node:20-alpine@sha256:df02558528d3d3d0d621f112e232611aecfee7cbc654f6b375765f72bb262799
+#5 DONE 0.0s
+
+#6 [frontend internal] load build context
+#6 transferring context: 6.56MB 5.0s
+#6 transferring context: 7.37MB 5.5s done
+#6 DONE 6.1s
+
+#7 [frontend deps 4/4] RUN npm config set legacy-peer-deps true && npm install --legacy-peer-deps
+#7 CACHED
+
+#8 [frontend runner 2/7] WORKDIR /app
+#8 CACHED
+
+#9 [frontend deps 3/4] COPY package.json package-lock.json* ./
+#9 CACHED
+
+#10 [frontend builder 3/5] COPY --from=deps /app/node_modules ./node_modules
+#10 CACHED
+
+#11 [frontend builder 4/5] COPY . .
+#11 DONE 32.9s
+
+#12 [frontend builder 5/5] RUN npm run build
+#12 1.110 
+#12 1.110 > my-v0-project@0.1.0 build
+#12 1.110 > next build
+#12 1.110 
+#12 1.999 Attention: Next.js now collects completely anonymous telemetry regarding usage.
+#12 1.999 This information is used to shape Next.js' roadmap and prioritize features.
+#12 1.999 You can learn more, including how to opt-out if you'd not like to participate in this anonymous program, by visiting the following URL:
+#12 1.999 https://nextjs.org/telemetry
+#12 1.999 
+#12 2.047    ▲ Next.js 15.1.0
+#12 2.047    - Experiments (use with caution):
+#12 2.047      · webpackBuildWorker
+#12 2.047      · parallelServerCompiles
+#12 2.049      · parallelServerBuildTraces
+#12 2.049 
+#12 2.120    Creating an optimized production build ...
+#12 42.39  ✓ Compiled successfully
+#12 42.41    Skipping validation of types
+#12 42.41    Skipping linting
+#12 42.77    Collecting page data ...
+#12 43.81    Generating static pages (0/8) ...
+#12 44.48    Generating static pages (2/8) 
+#12 44.48    Generating static pages (4/8) 
+#12 44.48    Generating static pages (6/8) 
+#12 44.59  ✓ Generating static pages (8/8)
+#12 44.60    Finalizing page optimization ...
+#12 44.60    Collecting build traces ...
+#12 44.63 
+#12 44.65 Route (app)                              Size     First Load JS
+#12 44.65 ┌ ○ /                                    246 kB          352 kB
+#12 44.65 ├ ○ /_not-found                          986 B           107 kB
+#12 44.65 ├ ○ /admin/connectors                    2.12 kB         108 kB
+#12 44.65 ├ ○ /admin/users                         2.16 kB         108 kB
+#12 44.65 ├ ○ /login                               5.19 kB         111 kB
+#12 44.65 └ ○ /register                            1.63 kB         107 kB
+#12 44.65 + First Load JS shared by all            106 kB
+#12 44.65   ├ chunks/4bd1b696-c48d6f4a9977b305.js  53 kB
+#12 44.65   ├ chunks/517-de3abab3c5eb0400.js       50.7 kB
+#12 44.65   └ other shared chunks (total)          1.94 kB
+#12 44.65 
+#12 44.65 
+#12 44.65 ○  (Static)  prerendered as static content
+#12 44.65 
+#12 45.02 npm notice
+#12 45.02 npm notice New major version of npm available! 10.8.2 -> 11.5.2
+#12 45.02 npm notice Changelog: https://github.com/npm/cli/releases/tag/v11.5.2
+#12 45.02 npm notice To update run: npm install -g npm@11.5.2
+#12 45.02 npm notice
+#12 DONE 45.6s
+
+#13 [frontend runner 3/7] COPY --from=builder /app/public ./public
+#13 CACHED
+
+#14 [frontend runner 4/7] COPY --from=builder /app/.next ./.next
+#14 DONE 1.2s
+
+#15 [frontend runner 5/7] COPY --from=builder /app/package.json ./package.json
+#15 DONE 0.0s
+
+#16 [frontend runner 6/7] COPY --from=builder /app/node_modules ./node_modules
+#16 DONE 10.7s
+
+#17 [frontend runner 7/7] COPY --from=builder /app/next.config.mjs ./next.config.mjs
+#17 DONE 0.0s
+
+#18 [frontend] exporting to image
+#18 exporting layers
+#18 exporting layers 2.8s done
+#18 writing image sha256:d44e09844d969b763fe9f758919b522c13ff512afcbb517bd05f362e0ebc7083 done
+#18 naming to docker.io/library/andy_gpt-frontend done
+#18 DONE 2.9s

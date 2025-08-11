@@ -20,6 +20,8 @@ import {
   Palette,
   LayoutGrid,
   Sliders,
+  Users,
+  Cloud,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import DashboardSection from "./sections/dashboard-section"
@@ -62,8 +64,8 @@ import { WidgetGallery, type WidgetType } from "./components/widget-gallery"
 import { WidgetCustomizer } from "./components/widget-customizer"
 import { PlatformCustomizer } from "./components/platform-customizer"
 import DashboardContent from "./dashboard-content"
-import LoadingScreen from "./components/loading-screen"
 import { getAuthToken } from "@/lib/api"
+import { useLogout } from "./components/logout-handler"
 
 type NavSection =
   | "dashboard"
@@ -133,13 +135,15 @@ const subsidiaries: Subsidiary[] = [
 ]
 
 function DashboardContentInner() {
+  const router = useRouter()
+  const handleLogout = useLogout()
   const [activeSection, setActiveSection] = useState<NavSection>("dashboard")
   const [openDialog, setOpenDialog] = useState<string | null>(null)
   const [ssoSetup, setSsoSetup] = useState(false)
   const [showSsoOptions, setShowSsoOptions] = useState(false)
   const [activeNotification, setActiveNotification] = useState<string | null>(null)
   const [selectedSubsidiary, setSelectedSubsidiary] = useState<Subsidiary>(subsidiaries[0])
-  const [sidebarExpanded, setSidebarExpanded] = useState(false)
+  const [sidebarExpanded, setSidebarExpanded] = useState(true)
   const [isSearchExpanded, setIsSearchExpanded] = useState(false)
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
 
@@ -273,7 +277,7 @@ function DashboardContentInner() {
       case "business-metrics":
         return <BusinessMetricsSection highlightItem={activeNotification} subsidiary={selectedSubsidiary} />
       case "data-sources":
-        return <DataSourcesSection highlightItem={activeNotification} subsidiary={selectedSubsidiary} />
+        return <DataSourcesSection />
       case "automated-actions":
         return <AutomatedActionsSection highlightItem={activeNotification} subsidiary={selectedSubsidiary} />
       case "market-intelligence":
@@ -281,7 +285,7 @@ function DashboardContentInner() {
       case "security":
         return <SecuritySection highlightItem={activeNotification} subsidiary={selectedSubsidiary} />
       case "settings":
-        return <SettingsSection highlightItem={activeNotification} subsidiary={selectedSubsidiary} />
+        return <SettingsSection />
       case "widgets":
         return <WidgetsSection />
       case "layout":
@@ -336,6 +340,21 @@ function DashboardContentInner() {
         </defs>
       </svg>
       <div className="min-h-screen flex flex-col">
+        {/* Emergency Logout Link - Always Visible at Top */}
+        <div style={{
+          position: 'fixed',
+          top: '10px',
+          right: '10px',
+          zIndex: 9999,
+          background: 'red',
+          padding: '10px',
+          borderRadius: '5px'
+        }}>
+          <a href="/logout" style={{ color: 'white', fontWeight: 'bold', textDecoration: 'none' }}>
+            CLICK HERE TO LOGOUT
+          </a>
+        </div>
+        
         {/* Header */}
         <header
           className={`h-16 border-b border-zamora-dark-light flex items-center px-6 ${isMobile ? "fixed top-0 left-0 right-0 z-50 bg-background/95 backdrop-blur-sm" : ""}`}
@@ -387,7 +406,7 @@ function DashboardContentInner() {
           </div>
 
           {/* Right section - subsidiary dropdown, notifications, user */}
-          <div className={`flex items-center justify-end gap-4 ${isMobile ? "w-1/3" : "w-1/4"}`}>
+          <div className={`flex items-center justify-end gap-2 ${isMobile ? "w-1/3" : "w-1/4"}`}>
             {/* Collapsible Search on Mobile */}
             {isMobile && <CollapsibleSearch onExpandChange={handleSearchExpandChange} />}
 
@@ -507,6 +526,62 @@ function DashboardContentInner() {
                 </div>
               </DropdownMenuContent>
             </DropdownMenu>
+            
+            {/* Simple HTML link for logout - guaranteed to work */}
+            <a 
+              href="/logout" 
+              style={{
+                padding: '8px 16px',
+                background: '#ef4444',
+                color: 'white',
+                textDecoration: 'none',
+                borderRadius: '6px',
+                fontWeight: 'bold',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px'
+              }}
+              onMouseOver={(e) => e.currentTarget.style.background = '#dc2626'}
+              onMouseOut={(e) => e.currentTarget.style.background = '#ef4444'}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                <polyline points="16 17 21 12 16 7" />
+                <line x1="21" y1="12" x2="9" y2="12" />
+              </svg>
+              Logout
+            </a>
+            
+            {/* Temporary direct logout button for testing */}
+            <Button 
+              variant="destructive" 
+              size="default"
+              className="bg-red-600 hover:bg-red-700 text-white font-semibold"
+              onClick={() => {
+                console.log('Direct logout clicked - starting logout process')
+                // Direct logout implementation - no external dependencies
+                try {
+                  // Clear all auth data
+                  localStorage.removeItem('andi_token')
+                  localStorage.removeItem('andi_user')
+                  sessionStorage.removeItem('fromLogin')
+                  sessionStorage.clear()
+                  
+                  console.log('Auth data cleared, redirecting to login...')
+                  
+                  // Force redirect to login
+                  window.location.href = '/login'
+                } catch (error) {
+                  console.error('Logout error:', error)
+                  // Fallback - still try to redirect
+                  window.location.href = '/login'
+                }
+              }}
+            >
+              <LogOut className="mr-2 h-4 w-4" />
+              Logout
+            </Button>
+            
             {!isMobile && (
               <div className="relative group">
                 <DropdownMenu>
@@ -528,6 +603,15 @@ function DashboardContentInner() {
                     <DropdownMenuItem onClick={() => setOpenDialog("settings")}>
                       <Settings className="mr-2 h-4 w-4" />
                       <span>User Settings</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={() => router.push("/admin/users") }>
+                      <Users className="mr-2 h-4 w-4" />
+                      <span>Admin → Users</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => router.push("/admin/connectors") }>
+                      <Cloud className="mr-2 h-4 w-4" />
+                      <span>Admin → Connectors</span>
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem onClick={() => setOpenDialog("logout")}>
@@ -734,7 +818,25 @@ function DashboardContentInner() {
               <Button variant="outline" onClick={() => setOpenDialog(null)}>
                 Cancel
               </Button>
-              <Button variant="destructive" onClick={() => setOpenDialog(null)}>
+              <Button 
+                variant="destructive" 
+                onClick={() => {
+                  console.log('Dialog logout button clicked')
+                  setOpenDialog(null)
+                  // Direct logout - same as the red button
+                  try {
+                    localStorage.removeItem('andi_token')
+                    localStorage.removeItem('andi_user')
+                    sessionStorage.removeItem('fromLogin')
+                    sessionStorage.clear()
+                    console.log('Logged out, redirecting...')
+                    window.location.href = '/login'
+                  } catch (error) {
+                    console.error('Logout error:', error)
+                    window.location.href = '/login'
+                  }
+                }}
+              >
                 Log Out
               </Button>
             </DialogFooter>
@@ -754,17 +856,9 @@ function DashboardContentInner() {
 
           {/* Desktop Sidebar */}
           <aside
-            className={cn(
-              "bg-gradient-to-b from-purple-900/80 via-purple-950/70 to-slate-900/60 flex flex-col rounded-r-2xl overflow-hidden shadow-lg backdrop-blur-sm hidden md:flex transition-all duration-500 ease-in-out",
-              sidebarExpanded ? "w-[220px]" : "w-[60px]",
-            )}
-            onMouseEnter={() => setSidebarExpanded(true)}
-            onMouseLeave={() => {
-              // Only collapse if no selection is in progress
-              setTimeout(() => {
-                setSidebarExpanded(false)
-              }, 100)
-            }}
+            className={
+              "bg-gradient-to-b from-purple-900/80 via-purple-950/70 to-slate-900/60 flex flex-col rounded-r-2xl shadow-lg backdrop-blur-sm hidden md:flex overflow-y-auto w-[220px]"
+            }
           >
             <div className="p-4 border-b border-purple-800/50">
               <div className={cn("flex items-center gap-2", sidebarExpanded ? "justify-start" : "justify-center")}>
@@ -778,7 +872,7 @@ function DashboardContentInner() {
               </div>
             </div>
 
-            <nav className="flex-1 py-4">
+            <nav className="flex-1 py-4 overflow-y-auto pr-1">
               <ul className="space-y-1 px-2">
                 <li>
                   <Button
@@ -881,6 +975,22 @@ function DashboardContentInner() {
                     variant="ghost"
                     className={cn(
                       "w-full text-white hover:bg-white/10 transition-all duration-500 ease-in-out",
+                      activeSection === "connectors" ? "bg-white/15 border-l-4 border-white" : "",
+                      sidebarExpanded
+                        ? "justify-start text-[10px] font-light tracking-wide pr-1"
+                        : "justify-center px-0",
+                    )}
+                    onClick={() => handleNavClick("connectors")}
+                  >
+                    <Cloud className={cn("h-3.5 w-3.5", sidebarExpanded ? "mr-2" : "")} />
+                    {sidebarExpanded && <span>CONNECTORS</span>}
+                  </Button>
+                </li>
+                <li>
+                  <Button
+                    variant="ghost"
+                    className={cn(
+                      "w-full text-white hover:bg-white/10 transition-all duration-500 ease-in-out",
                       activeSection === "security" ? "bg-white/15 border-l-4 border-white" : "",
                       sidebarExpanded
                         ? "justify-start text-[10px] font-light tracking-wide pr-1"
@@ -908,7 +1018,70 @@ function DashboardContentInner() {
                     {sidebarExpanded && <span>SETTINGS</span>}
                   </Button>
                 </li>
+                {/* Admin shortcuts inline so they are always visible */}
+                <li>
+                  <Button
+                    variant="ghost"
+                    className={cn(
+                      "w-full text-white hover:bg-white/10 transition-all duration-500 ease-in-out",
+                      sidebarExpanded ? "justify-start text-[10px] font-light tracking-wide pr-1" : "justify-center px-0",
+                    )}
+                    onClick={() => router.push("/admin/users")}
+                  >
+                    <Users className={cn("h-3.5 w-3.5", sidebarExpanded ? "mr-2" : "")} />
+                    {sidebarExpanded && <span>ADMIN USERS</span>}
+                  </Button>
+                </li>
+                <li>
+                  <Button
+                    variant="ghost"
+                    className={cn(
+                      "w-full text-white hover:bg-white/10 transition-all duration-500 ease-in-out",
+                      sidebarExpanded ? "justify-start text-[10px] font-light tracking-wide pr-1" : "justify-center px-0",
+                    )}
+                    onClick={() => router.push("/admin/connectors")}
+                  >
+                    <Cloud className={cn("h-3.5 w-3.5", sidebarExpanded ? "mr-2" : "")} />
+                    {sidebarExpanded && <span>ADMIN CONNECTORS</span>}
+                  </Button>
+                </li>
               </ul>
+              {/* Admin group (moved above customization for visibility) */}
+              <div className="px-2 mt-2">
+                <div className="h-px bg-white/20 my-2"></div>
+                <p className={cn("text-[10px] font-light text-white/50 px-2 py-1", !sidebarExpanded && "hidden")}>
+                  ADMIN
+                </p>
+                <ul className="space-y-1 mt-1">
+                  <li>
+                    <Button
+                      variant="ghost"
+                      className={cn(
+                        "w-full text-white hover:bg-white/10 transition-all duration-500 ease-in-out",
+                        sidebarExpanded ? "justify-start text-[10px] font-light tracking-wide pr-1" : "justify-center px-0",
+                      )}
+                      onClick={() => router.push("/admin/users")}
+                    >
+                      <Users className={cn("h-3.5 w-3.5", sidebarExpanded ? "mr-2" : "")} />
+                      {sidebarExpanded ? <span>USERS</span> : null}
+                    </Button>
+                  </li>
+                  <li>
+                    <Button
+                      variant="ghost"
+                      className={cn(
+                        "w-full text-white hover:bg-white/10 transition-all duration-500 ease-in-out",
+                        sidebarExpanded ? "justify-start text-[10px] font-light tracking-wide pr-1" : "justify-center px-0",
+                      )}
+                      onClick={() => router.push("/admin/connectors")}
+                    >
+                      <Cloud className={cn("h-3.5 w-3.5", sidebarExpanded ? "mr-2" : "")} />
+                      {sidebarExpanded ? <span>CONNECTORS</span> : null}
+                    </Button>
+                  </li>
+                </ul>
+              </div>
+
               <div className="px-2 mt-4">
                 <div className="h-px bg-white/20 my-2"></div>
                 <p className={cn("text-[10px] font-light text-white/50 px-2 py-1", !sidebarExpanded && "hidden")}>
@@ -962,6 +1135,7 @@ function DashboardContentInner() {
                   </li>
                 </ul>
               </div>
+
             </nav>
           </aside>
 
@@ -1016,7 +1190,7 @@ export default function Home() {
   const router = useRouter()
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
-  const [isLoadingComplete, setIsLoadingComplete] = useState(false)
+  
 
   useEffect(() => {
     const checkAuth = () => {
@@ -1032,10 +1206,6 @@ export default function Home() {
     checkAuth()
   }, [router])
 
-  const handleLoadComplete = () => {
-    setIsLoadingComplete(true)
-  }
-
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-black">
@@ -1046,10 +1216,6 @@ export default function Home() {
 
   if (!isAuthenticated) {
     return null
-  }
-
-  if (!isLoadingComplete) {
-    return <LoadingScreen onLoadComplete={handleLoadComplete} />
   }
 
   return <DashboardContent />

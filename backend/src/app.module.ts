@@ -1,3 +1,12 @@
+import { webcrypto, randomUUID } from 'crypto'
+
+// Ensure global Web Crypto API is available for libraries expecting `globalThis.crypto`
+// Fallback to providing only `randomUUID` if `webcrypto` is not supported by the Node version
+const globalAny = globalThis as any
+if (!globalAny.crypto) {
+  globalAny.crypto = webcrypto || { randomUUID }
+}
+
 import { Module } from '@nestjs/common'
 import { ConfigModule } from '@nestjs/config'
 import { TypeOrmModule } from '@nestjs/typeorm'
@@ -8,6 +17,7 @@ import { User } from './users/user.entity'
 import { Role } from './rbac/role.entity'
 import { Permission } from './rbac/permission.entity'
 import { ConnectorsModule } from './connectors/connectors.module'
+import { AiModule } from './ai/ai.module'
 import { Connector } from './connectors/connector.entity'
 import { CrmAccount, CrmActivity, CrmContact, CrmDeal } from './connectors/unified-crm.entities'
 
@@ -25,6 +35,7 @@ import { CrmAccount, CrmActivity, CrmContact, CrmDeal } from './connectors/unifi
     AuthModule,
     UsersModule,
     ConnectorsModule,
+    AiModule,
   ],
 })
 export class AppModule {}

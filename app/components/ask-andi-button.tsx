@@ -4,7 +4,7 @@ import { useState } from "react"
 import { Brain } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { motion } from "framer-motion"
-import { AskAndi } from "./ask-andi"
+import { AskAndiEnhanced } from "./ask-andi-enhanced"
 
 export function AskAndiButton() {
   const [isOpen, setIsOpen] = useState(false)
@@ -22,7 +22,7 @@ export function AskAndiButton() {
         </Button>
       </motion.div>
 
-      <AskAndi isOpen={isOpen} onClose={() => setIsOpen(false)} />
+      <AskAndiEnhanced isOpen={isOpen} onClose={() => setIsOpen(false)} />
     </>
   )
 }

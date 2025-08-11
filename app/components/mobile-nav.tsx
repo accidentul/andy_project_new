@@ -14,6 +14,8 @@ import {
   Rocket,
   Globe,
   ShieldCheck,
+  Users,
+  Cloud,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
@@ -168,6 +170,34 @@ export function MobileNav({
                   >
                     <Settings className="h-3.5 w-3.5 mr-2" />
                     SETTINGS
+                  </Button>
+                </li>
+
+                {/* Admin quick links */}
+                <li>
+                  <Button
+                    variant="ghost"
+                    className={`w-full justify-start text-white hover:bg-white/10 text-[10px] font-light tracking-wide`}
+                    onClick={() => {
+                      setOpen(false)
+                      window.location.href = "/admin/users"
+                    }}
+                  >
+                    <Users className="h-3.5 w-3.5 mr-2" />
+                    ADMIN → USERS
+                  </Button>
+                </li>
+                <li>
+                  <Button
+                    variant="ghost"
+                    className={`w-full justify-start text-white hover:bg-white/10 text-[10px] font-light tracking-wide`}
+                    onClick={() => {
+                      setOpen(false)
+                      window.location.href = "/admin/connectors"
+                    }}
+                  >
+                    <Cloud className="h-3.5 w-3.5 mr-2" />
+                    ADMIN → CONNECTORS
                   </Button>
                 </li>
               </ul>

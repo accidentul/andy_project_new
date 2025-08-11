@@ -107,3 +107,42 @@ export async function createConnector(input: { provider: 'salesforce' | 'hubspot
     body: JSON.stringify(input),
   })
 }
+
+export type SuggestedWidget = {
+  id: string
+  title: string
+  size: 'tiny' | 'small' | 'medium' | 'large'
+  type: 'line' | 'bar' | 'area' | 'kpi'
+  description: string
+  data: any
+}
+
+export async function getAiSuggestions(): Promise<{ suggestions: SuggestedWidget[] }> {
+  return apiFetch('/api/ai/suggestions')
+}
+
+export async function seedDemoCrm(connectorId: string, provider: 'salesforce' | 'hubspot') {
+  return apiFetch('/api/ai/seed', {
+    method: 'POST',
+    body: JSON.stringify({ connectorId, provider }),
+  })
+}
+
+export function logout() {
+  console.log('Logout function called')
+  
+  // Clear auth token
+  clearAuthToken()
+  
+  // Clear any cached user data
+  if (typeof window !== 'undefined') {
+    localStorage.removeItem('andi_user')
+    localStorage.removeItem('andi_token')
+    sessionStorage.removeItem('fromLogin')
+    
+    console.log('Cleared auth data, redirecting to login...')
+    
+    // Force redirect to login page
+    window.location.replace('/login')
+  }
+}

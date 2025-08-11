@@ -40,12 +40,29 @@ export function WidgetGrid({ initialWidgets, renderWidget, onCustomizeWidget }: 
     cycleWidgetSize,
     increaseWidgetSize,
     decreaseWidgetSize,
+    addWidget,
     removeWidget,
     gridRef,
   } = useDraggableWidgets(initialWidgets)
 
   const [confirmDialog, setConfirmDialog] = useState(false)
   const [widgetToRemove, setWidgetToRemove] = useState<string | null>(null)
+
+  // Sync newly provided initialWidgets (e.g., AI suggestions) into grid state
+  useEffect(() => {
+    const currentIds = new Set(widgets.map((w) => w.id))
+    const toAdd = initialWidgets.filter((w) => !currentIds.has(w.id))
+    if (toAdd.length > 0) {
+      for (const w of toAdd) {
+        // addWidget expects a widget without the 'order' field
+        const { order, ...rest } = w as any
+        // Guard against duplicates by id
+        if (!currentIds.has(rest.id)) {
+          addWidget(rest)
+        }
+      }
+    }
+  }, [initialWidgets, widgets, addWidget])
 
   // Handle widget removal with confirmation
   const handleRemoveWidget = (widgetId: string) => {

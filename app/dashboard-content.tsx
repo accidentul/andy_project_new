@@ -19,7 +19,10 @@ import {
   Palette,
   LayoutGrid,
   Sliders,
+  Users,
+  Cloud,
 } from "lucide-react"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import DashboardSection from "./sections/dashboard-section"
 import { AIInsightsSection } from "./sections/ai-insights-section"
@@ -129,6 +132,7 @@ const subsidiaries: Subsidiary[] = [
 ]
 
 export default function DashboardContent() {
+  const router = useRouter()
   const [activeSection, setActiveSection] = useState<NavSection>("dashboard")
   const [openDialog, setOpenDialog] = useState<string | null>(null)
   const [ssoSetup, setSsoSetup] = useState(false)
@@ -749,7 +753,7 @@ export default function DashboardContent() {
               </div>
             </div>
 
-            <nav className="flex-1 py-4">
+            <nav className="flex-1 py-4 overflow-y-auto pr-1">
               <ul className="space-y-1 px-2">
                 <li>
                   <Button
@@ -880,6 +884,41 @@ export default function DashboardContent() {
                   </Button>
                 </li>
               </ul>
+              {/* Admin group */}
+              <div className="px-2 mt-2">
+                <div className="h-px bg-white/20 my-2"></div>
+                <p className={cn("text-[10px] font-light text-white/50 px-2 py-1", !sidebarExpanded && "hidden")}>
+                  ADMIN
+                </p>
+                <ul className="space-y-1 mt-1">
+                  <li>
+                    <Button
+                      variant="ghost"
+                      className={cn(
+                        "w-full text-white hover:bg-white/10 transition-all duration-500 ease-in-out",
+                        sidebarExpanded ? "justify-start text-[10px] font-light tracking-wide pr-1" : "justify-center px-0",
+                      )}
+                      onClick={() => router.push("/admin/users")}
+                    >
+                      <Users className={cn("h-3.5 w-3.5", sidebarExpanded ? "mr-2" : "")} />
+                      {sidebarExpanded ? <span>USERS</span> : null}
+                    </Button>
+                  </li>
+                  <li>
+                    <Button
+                      variant="ghost"
+                      className={cn(
+                        "w-full text-white hover:bg-white/10 transition-all duration-500 ease-in-out",
+                        sidebarExpanded ? "justify-start text-[10px] font-light tracking-wide pr-1" : "justify-center px-0",
+                      )}
+                      onClick={() => router.push("/admin/connectors")}
+                    >
+                      <Cloud className={cn("h-3.5 w-3.5", sidebarExpanded ? "mr-2" : "")} />
+                      {sidebarExpanded ? <span>CONNECTORS</span> : null}
+                    </Button>
+                  </li>
+                </ul>
+              </div>
               <div className="px-2 mt-4">
                 <div className="h-px bg-white/20 my-2"></div>
                 <p className={cn("text-[10px] font-light text-white/50 px-2 py-1", !sidebarExpanded && "hidden")}>

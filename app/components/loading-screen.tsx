@@ -48,7 +48,7 @@ export default function LoadingScreen({ onLoadComplete }: LoadingScreenProps) {
 
         <h1 className="text-2xl font-medium mb-6 text-center">
           <span className="bg-gradient-to-r from-blue-400 via-purple-500 to-blue-500 bg-clip-text text-transparent">
-            Waking up andi...
+            Loading...
           </span>
         </h1>
 
