@@ -97,6 +97,24 @@ export type Connector = {
   createdAt: string
 }
 
+// API Client for AI endpoints
+export const apiClient = {
+  get: async (path: string) => {
+    return apiFetch(path)
+  },
+  post: async (path: string, body?: any) => {
+    return apiFetch(path, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    })
+  },
+  delete: async (path: string) => {
+    return apiFetch(path, {
+      method: 'DELETE',
+    })
+  },
+}
+
 export async function listConnectors(): Promise<Connector[]> {
   return apiFetch('/api/connectors')
 }

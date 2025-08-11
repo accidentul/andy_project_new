@@ -102,7 +102,7 @@ export function AskAndiEnhanced({ isOpen, onClose }: AskAndiEnhancedProps) {
 
   const loadSuggestedActions = async () => {
     try {
-      const response = await apiClient.get('/ai/suggested-actions')
+      const response = await apiClient.get('/api/ai/suggested-actions')
       if (response.success && response.actions) {
         setSuggestedActions(response.actions)
       }
@@ -165,7 +165,7 @@ export function AskAndiEnhanced({ isOpen, onClose }: AskAndiEnhancedProps) {
 
     try {
       // Call the enhanced AI API
-      const response = await apiClient.post('/ai/chat', {
+      const response = await apiClient.post('/api/ai/chat', {
         query: chatInput,
         conversationId: conversationId,
       })
