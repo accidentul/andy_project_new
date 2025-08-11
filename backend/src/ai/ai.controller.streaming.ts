@@ -1,12 +1,22 @@
-import { Controller, Post, Body, UseGuards, Request, Res, HttpStatus } from '@nestjs/common'
+import { Controller, Post, Get, Body, Query, UseGuards, Request, Res, HttpStatus } from '@nestjs/common'
 import { Response } from 'express'
 import { JwtAuthGuard } from '../auth/jwt-auth.guard'
+import { JwtService } from '@nestjs/jwt'
 import { ChatOpenAI } from '@langchain/openai'
 import { HumanMessage, SystemMessage } from '@langchain/core/messages'
 import { AgentFactory } from './agents/agent.factory'
+import { InjectRepository } from '@nestjs/typeorm'
+import { Repository } from 'typeorm'
+import { User } from '../users/user.entity'
+import { IsString, IsOptional } from 'class-validator'
+import { CrmAccount, CrmContact, CrmDeal, CrmActivity } from '../connectors/unified-crm.entities'
 
 class StreamingChatDto {
+  @IsString()
   query!: string
+  
+  @IsOptional()
+  @IsString()
   conversationId?: string
 }
 

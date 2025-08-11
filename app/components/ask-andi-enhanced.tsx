@@ -142,14 +142,53 @@ export function AskAndiEnhanced({ isOpen, onClose }: AskAndiEnhancedProps) {
     // Add execution message
     setChatMessages(prev => [...prev, {
       role: "assistant",
-      content: `Executing: ${action.title}\n\nThis action is now in progress. You'll be notified when it's complete.`,
+      content: `Executing: ${action.title}\n\nThis action is now in progress...`,
     }])
 
-    // Here you would actually execute the action via API
-    console.log('Executing action:', action)
+    try {
+      // Execute action via API
+      const response = await apiClient.post('/api/ai/actions/execute', {
+        action: action,
+        conversationId: conversationId
+      })
+      
+      if (response.success) {
+        // Show success message with results
+        let resultMessage = `✅ ${action.title} completed successfully!`
+        
+        if (response.data) {
+          if (response.data.filename) {
+            resultMessage += `\n📄 File generated: ${response.data.filename}`
+          }
+          if (response.data.recordCount) {
+            resultMessage += `\n📊 Records processed: ${response.data.recordCount}`
+          }
+          if (response.data.downloadUrl) {
+            resultMessage += `\n⬇️ Download: ${response.data.downloadUrl}`
+          }
+        }
+        
+        setChatMessages(prev => [...prev, {
+          role: "assistant",
+          content: resultMessage,
+        }])
+      } else {
+        // Show error message
+        setChatMessages(prev => [...prev, {
+          role: "assistant",
+          content: `❌ Failed to execute ${action.title}: ${response.error || 'Unknown error'}`,
+        }])
+      }
+    } catch (error) {
+      console.error('Action execution error:', error)
+      setChatMessages(prev => [...prev, {
+        role: "assistant",
+        content: `❌ Error executing action: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      }])
+    }
   }
 
-  // Handle chat input
+  // Handle chat input with streaming
   const handleChatSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!chatInput.trim()) return
@@ -160,43 +199,127 @@ export function AskAndiEnhanced({ isOpen, onClose }: AskAndiEnhancedProps) {
       content: chatInput,
     }
     setChatMessages((prev) => [...prev, userMessage])
+    const query = chatInput
     setChatInput("")
     setIsTyping(true)
 
     try {
-      // Call the enhanced AI API
+      // Use streaming endpoint for typewriter effect
+      const streamUrl = `${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:4000'}/api/ai/chat/stream`
+      
+      // Create assistant message placeholder
+      let assistantContent = ""
+      const assistantMessageIndex = chatMessages.length + 1
+      
+      // Add empty assistant message that we'll update
+      setChatMessages((prev) => [...prev, {
+        role: "assistant",
+        content: "",
+        actions: [],
+      }])
+      
+      // Set up EventSource for SSE
+      const eventSource = new EventSource(
+        `${streamUrl}?${new URLSearchParams({
+          query: query,
+          conversationId: conversationId || '',
+          token: localStorage.getItem('token') || ''
+        })}`
+      )
+      
+      eventSource.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data)
+          
+          if (data.type === 'content') {
+            // Append content with typewriter effect
+            assistantContent += data.content
+            setChatMessages((prev) => {
+              const newMessages = [...prev]
+              if (newMessages[assistantMessageIndex]) {
+                newMessages[assistantMessageIndex].content = assistantContent
+              }
+              return newMessages
+            })
+          } else if (data.type === 'actions') {
+            // Update actions when received
+            setChatMessages((prev) => {
+              const newMessages = [...prev]
+              if (newMessages[assistantMessageIndex]) {
+                newMessages[assistantMessageIndex].actions = data.actions
+              }
+              return newMessages
+            })
+          } else if (data.type === 'done') {
+            // Streaming complete
+            eventSource.close()
+            setIsTyping(false)
+            
+            // Set conversation ID if provided
+            if (data.conversationId && !conversationId) {
+              setConversationId(data.conversationId)
+            }
+          } else if (data.type === 'error') {
+            console.error('Streaming error:', data.message)
+            eventSource.close()
+            setIsTyping(false)
+          }
+        } catch (error) {
+          console.error('Error parsing SSE data:', error)
+        }
+      }
+      
+      eventSource.onerror = (error) => {
+        console.error('SSE error:', error)
+        eventSource.close()
+        setIsTyping(false)
+        
+        // Fallback to non-streaming API
+        fallbackToNonStreaming(query)
+      }
+      
+    } catch (error) {
+      console.error('AI chat error:', error)
+      setChatMessages((prev) => [...prev, {
+        role: "assistant",
+        content: "I encountered an error processing your request. Please ensure the backend AI service is configured.",
+      }])
+      setIsTyping(false)
+    }
+  }
+  
+  // Fallback to non-streaming API if SSE fails
+  const fallbackToNonStreaming = async (query: string) => {
+    try {
       const response = await apiClient.post('/api/ai/chat', {
-        query: chatInput,
+        query: query,
         conversationId: conversationId,
       })
 
       if (response.success && response.response) {
         const aiResponse = response.response
         
-        // Set conversation ID if not already set
+        // Update the last assistant message
+        setChatMessages((prev) => {
+          const newMessages = [...prev]
+          if (newMessages.length > 0 && newMessages[newMessages.length - 1].role === 'assistant') {
+            newMessages[newMessages.length - 1] = {
+              role: "assistant",
+              content: aiResponse.content,
+              actions: aiResponse.actions,
+              confidence: aiResponse.confidence,
+              attachment: detectAttachmentType(aiResponse.content),
+            }
+          }
+          return newMessages
+        })
+        
         if (!conversationId && response.conversationId) {
           setConversationId(response.conversationId)
         }
-
-        // Add AI response with enhanced features
-        const assistantMessage: ChatMessage = {
-          role: "assistant",
-          content: aiResponse.content,
-          actions: aiResponse.actions,
-          confidence: aiResponse.confidence,
-          attachment: detectAttachmentType(aiResponse.content),
-        }
-
-        setChatMessages((prev) => [...prev, assistantMessage])
       }
     } catch (error) {
-      console.error('AI chat error:', error)
-      setChatMessages((prev) => [...prev, {
-        role: "assistant",
-        content: "I encountered an error processing your request. Please ensure the backend AI service is configured with an OpenAI API key.",
-      }])
-    } finally {
-      setIsTyping(false)
+      console.error('Fallback API error:', error)
     }
   }
 

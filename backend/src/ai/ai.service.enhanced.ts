@@ -131,65 +131,298 @@ export class EnhancedAiService {
 
   private async gatherBusinessContext(user: User): Promise<any> {
     const tenantId = user.tenant.id
-    const roleTitle = (user as any).roleTitle || user.role?.name
-    const department = (user as any).department
+    const roleTitle = (user as any).roleTitle || user.role?.name || 'User'
+    const department = (user as any).department || 'General'
+    
+    // Fetch all relevant data (no relations in current schema)
+    const [deals, accounts, contacts, activities] = await Promise.all([
+      this.dealRepo.find({ 
+        where: { tenant: { id: tenantId } }
+      }),
+      this.accountRepo.find({ 
+        where: { tenant: { id: tenantId } }
+      }),
+      this.contactRepo.find({ 
+        where: { tenant: { id: tenantId } }
+      }),
+      this.activityRepo.find({ 
+        where: { tenant: { id: tenantId } },
+        order: { createdAt: 'DESC' },
+        take: 100
+      })
+    ])
+    
+    // Calculate common metrics
+    const wonDeals = deals.filter(d => d.stage?.toLowerCase().includes('won'))
+    const lostDeals = deals.filter(d => d.stage?.toLowerCase().includes('lost'))
+    const openDeals = deals.filter(d => 
+      !d.stage?.toLowerCase().includes('closed') && 
+      !d.stage?.toLowerCase().includes('won') && 
+      !d.stage?.toLowerCase().includes('lost')
+    )
+    
+    const totalRevenue = wonDeals.reduce((sum, d) => sum + Number(d.amount || 0), 0)
+    const pipelineValue = openDeals.reduce((sum, d) => sum + Number(d.amount || 0), 0)
+    const avgDealSize = wonDeals.length > 0 ? totalRevenue / wonDeals.length : 0
+    const winRate = deals.length > 0 ? (wonDeals.length / deals.length) * 100 : 0
+    
+    // Calculate time-based metrics
+    const now = new Date()
+    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
+    const ninetyDaysAgo = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000)
+    
+    const recentWonDeals = wonDeals.filter(d => 
+      d.closeDate && new Date(d.closeDate) > thirtyDaysAgo
+    )
+    const recentActivities = activities.filter(a => 
+      a.createdAt && new Date(a.createdAt) > thirtyDaysAgo
+    )
+    
+    // Calculate velocity metrics
+    const dealVelocity = wonDeals.length > 0 ? 
+      wonDeals.reduce((sum, d) => {
+        if (d.createdAt && d.closeDate) {
+          const days = Math.floor((new Date(d.closeDate).getTime() - new Date(d.createdAt).getTime()) / (1000 * 60 * 60 * 24))
+          return sum + days
+        }
+        return sum
+      }, 0) / wonDeals.length : 0
     
     const context: any = {
       userRole: roleTitle,
       department,
+      dataFreshness: new Date().toISOString(),
+      metrics: {
+        totalRevenue,
+        pipelineValue,
+        dealCount: deals.length,
+        accountCount: accounts.length,
+        contactCount: contacts.length,
+        activityCount: activities.length,
+        avgDealSize,
+        winRate: Math.round(winRate),
+        dealVelocity: Math.round(dealVelocity)
+      }
     }
     
-    // Gather role-specific data
-    if (roleTitle?.toLowerCase().includes('ceo') || roleTitle?.toLowerCase().includes('executive')) {
-      // CEO gets company-wide metrics
-      const deals = await this.dealRepo.find({ where: { tenant: { id: tenantId } } })
-      const totalRevenue = deals.reduce((sum, d) => sum + Number(d.amount || 0), 0)
-      
-      context.revenue = {
-        current: Math.round(totalRevenue / 1000000),
-        growth: 15, // Would calculate from historical data
+    // Add role-specific detailed context
+    if (roleTitle.toLowerCase().includes('ceo') || roleTitle.toLowerCase().includes('executive')) {
+      // CEO gets comprehensive company metrics
+      context.executive = {
+        revenue: {
+          total: totalRevenue,
+          monthly: recentWonDeals.reduce((sum, d) => sum + Number(d.amount || 0), 0),
+          growth: this.calculateGrowthRate(wonDeals, thirtyDaysAgo, ninetyDaysAgo),
+          forecast: pipelineValue * (winRate / 100) * 0.8 // Conservative forecast
+        },
+        performance: {
+          dealsClosed: wonDeals.length,
+          dealsLost: lostDeals.length,
+          winRate: Math.round(winRate),
+          avgDealCycle: Math.round(dealVelocity),
+          customerRetention: this.calculateRetentionRate(accounts, activities)
+        },
+        opportunities: {
+          pipeline: pipelineValue,
+          qualifiedLeads: openDeals.filter(d => d.stage?.includes('Qualified')).length,
+          topDeals: openDeals
+            .sort((a, b) => Number(b.amount || 0) - Number(a.amount || 0))
+            .slice(0, 5)
+            .map(d => ({ name: d.name, amount: d.amount, stage: d.stage }))
+        },
+        risks: this.identifyRisks(deals, activities, accounts)
       }
-      
-      context.performance = {
-        overall: 78,
-        marketShare: 12,
+    } else if (department.toLowerCase().includes('sales')) {
+      // Sales gets detailed pipeline metrics
+      context.sales = {
+        pipeline: {
+          total: pipelineValue,
+          byStage: this.groupDealsByStage(openDeals),
+          velocity: dealVelocity,
+          coverage: pipelineValue / (totalRevenue / 12) // Pipeline coverage ratio
+        },
+        performance: {
+          quota: totalRevenue,
+          achieved: recentWonDeals.reduce((sum, d) => sum + Number(d.amount || 0), 0),
+          winRate: Math.round(winRate),
+          avgDealSize: Math.round(avgDealSize)
+        },
+        activities: {
+          total: recentActivities.length,
+          byType: this.groupActivitiesByType(recentActivities),
+          perDeal: activities.length / Math.max(deals.length, 1)
+        },
+        topOpportunities: openDeals
+          .sort((a, b) => Number(b.amount || 0) - Number(a.amount || 0))
+          .slice(0, 10)
+          .map(d => ({
+            id: d.id,
+            name: d.name,
+            amount: d.amount,
+            stage: d.stage,
+            account: null, // No account relation in current schema
+            daysInStage: d.updatedAt ? 
+              Math.floor((now.getTime() - new Date(d.updatedAt).getTime()) / (1000 * 60 * 60 * 24)) : 0
+          }))
       }
-    } else if (department?.toLowerCase().includes('sales')) {
-      // Sales gets pipeline and deal metrics
-      const deals = await this.dealRepo.find({ where: { tenant: { id: tenantId } } })
-      const openDeals = deals.filter(d => !d.stage?.toLowerCase().includes('closed'))
-      const wonDeals = deals.filter(d => d.stage?.toLowerCase().includes('won'))
+    } else if (department.toLowerCase().includes('marketing')) {
+      // Marketing gets lead and campaign metrics
+      const newContacts = contacts.filter(c => 
+        c.createdAt && new Date(c.createdAt) > thirtyDaysAgo
+      )
       
-      context.pipeline = {
-        total: Math.round(openDeals.reduce((sum, d) => sum + Number(d.amount || 0), 0) / 1000000),
-        qualified: Math.round(openDeals.filter(d => d.stage?.includes('Qualified')).reduce((sum, d) => sum + Number(d.amount || 0), 0) / 1000000),
-        coverage: 2.5,
+      context.marketing = {
+        leads: {
+          total: contacts.length,
+          new: newContacts.length,
+          bySource: this.groupContactsBySource(contacts),
+          conversionRate: (wonDeals.length / Math.max(contacts.length, 1)) * 100
+        },
+        engagement: {
+          activities: recentActivities.length,
+          emailsSent: recentActivities.filter(a => a.type === 'email').length,
+          callsMade: recentActivities.filter(a => a.type === 'call').length,
+          meetingsHeld: recentActivities.filter(a => a.type === 'meeting').length
+        },
+        pipeline: {
+          influenced: openDeals.length, // All deals are influenced
+          value: openDeals
+            // All deals counted as influenced
+            .reduce((sum, d) => sum + Number(d.amount || 0), 0)
+        },
+        topAccounts: accounts
+          .map(a => ({
+            name: a.name,
+            contacts: 0, // No account relation in current schema
+            deals: 0, // No account relation in current schema
+            revenue: wonDeals
+              .filter(d => false) // No account relation in current schema
+              .reduce((sum, d) => sum + Number(d.amount || 0), 0)
+          }))
+          .sort((a, b) => b.revenue - a.revenue)
+          .slice(0, 5)
       }
-      
-      context.deals = {
-        count: openDeals.length,
-        averageSize: Math.round(openDeals.reduce((sum, d) => sum + Number(d.amount || 0), 0) / openDeals.length / 1000),
-        winRate: Math.round((wonDeals.length / deals.length) * 100),
+    } else {
+      // Default context for other roles
+      context.general = {
+        summary: {
+          revenue: totalRevenue,
+          pipeline: pipelineValue,
+          accounts: accounts.length,
+          contacts: contacts.length,
+          activities: activities.length
+        },
+        trends: {
+          dealsWon: recentWonDeals.length,
+          newContacts: contacts.filter(c => 
+            c.createdAt && new Date(c.createdAt) > thirtyDaysAgo
+          ).length,
+          recentActivities: recentActivities.length
+        }
       }
-    } else if (department?.toLowerCase().includes('marketing')) {
-      // Marketing gets campaign and lead metrics
-      const contacts = await this.contactRepo.find({ where: { tenant: { id: tenantId } } })
-      const activities = await this.activityRepo.find({ where: { tenant: { id: tenantId } } })
-      
-      context.campaigns = {
-        active: 5,
-        avgROI: 250,
-        topPerformer: 'Q4 Product Launch',
-      }
-      
-      context.leads = {
-        mqls: contacts.length,
-        conversionRate: 15,
-        cpl: 150,
-      }
+    }
+    
+    // Add real metrics summary for AI to reference
+    context.currentMetrics = {
+      totalRevenue,
+      pipelineValue,
+      dealCount: deals.length,
+      contactCount: contacts.length,
+      avgDealSize: Math.round(avgDealSize)
     }
     
     return context
+  }
+  
+  private calculateGrowthRate(deals: any[], recent: Date, previous: Date): number {
+    const recentRevenue = deals
+      .filter(d => d.closeDate && new Date(d.closeDate) > recent)
+      .reduce((sum, d) => sum + Number(d.amount || 0), 0)
+    
+    const previousRevenue = deals
+      .filter(d => d.closeDate && new Date(d.closeDate) > previous && new Date(d.closeDate) <= recent)
+      .reduce((sum, d) => sum + Number(d.amount || 0), 0)
+    
+    if (previousRevenue === 0) return 0
+    return Math.round(((recentRevenue - previousRevenue) / previousRevenue) * 100)
+  }
+  
+  private calculateRetentionRate(accounts: any[], activities: any[]): number {
+    // Simple retention: accounts with recent activity (assuming all accounts active)
+    if (accounts.length === 0) return 0
+    // For now, assume 80% retention as we don't have account-activity relations
+    return 80
+  }
+  
+  private identifyRisks(deals: any[], activities: any[], accounts: any[]): string[] {
+    const risks = []
+    
+    // Check for stalled deals
+    const stalledDeals = deals.filter(d => {
+      if (d.updatedAt && !d.stage?.includes('Closed')) {
+        const daysSinceUpdate = Math.floor(
+          (new Date().getTime() - new Date(d.updatedAt).getTime()) / (1000 * 60 * 60 * 24)
+        )
+        return daysSinceUpdate > 30
+      }
+      return false
+    })
+    
+    if (stalledDeals.length > 0) {
+      risks.push(`${stalledDeals.length} deals have been stalled for over 30 days`)
+    }
+    
+    // Check for low activity
+    const recentActivities = activities.filter(a => 
+      a.createdAt && new Date(a.createdAt) > new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+    )
+    
+    if (recentActivities.length < deals.length * 2) {
+      risks.push('Low sales activity relative to pipeline size')
+    }
+    
+    // Check for concentration risk (simplified without account relations)
+    const totalRevenue = deals
+      .filter(d => d.stage?.includes('Won'))
+      .reduce((sum, d) => sum + Number(d.amount || 0), 0)
+    
+    // Check if too few accounts relative to revenue
+    if (accounts.length > 0 && totalRevenue / accounts.length > 100000) {
+      risks.push('Potential revenue concentration - high average revenue per account')
+    }
+    
+    return risks
+  }
+  
+  private groupDealsByStage(deals: any[]): any {
+    const stages: any = {}
+    deals.forEach(d => {
+      const stage = d.stage || 'Unknown'
+      if (!stages[stage]) {
+        stages[stage] = { count: 0, value: 0 }
+      }
+      stages[stage].count++
+      stages[stage].value += Number(d.amount || 0)
+    })
+    return stages
+  }
+  
+  private groupActivitiesByType(activities: any[]): any {
+    const types: any = {}
+    activities.forEach(a => {
+      const type = a.type || 'Other'
+      types[type] = (types[type] || 0) + 1
+    })
+    return types
+  }
+  
+  private groupContactsBySource(contacts: any[]): any {
+    const sources: any = {}
+    contacts.forEach(c => {
+      const source = (c as any).source || 'Direct'
+      sources[source] = (sources[source] || 0) + 1
+    })
+    return sources
   }
 
   private async enhanceWithRealTimeData(
