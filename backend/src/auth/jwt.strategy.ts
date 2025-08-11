@@ -1,38 +1,40 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common'
 import { PassportStrategy } from '@nestjs/passport'
 import { ExtractJwt, Strategy } from 'passport-jwt'
-import { InjectRepository } from '@nestjs/typeorm'
-import { Repository } from 'typeorm'
-import { User } from '../users/user.entity'
+import { UsersService } from '../users/users.service'
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
-  constructor(
-    @InjectRepository(User)
-    private userRepository: Repository<User>,
-  ) {
+  constructor(private usersService: UsersService) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
-      secretOrKey: process.env.JWT_SECRET || 'dev-secret-change-in-prod',
+      secretOrKey: process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-in-production',
     })
   }
 
   async validate(payload: any) {
     if (!payload?.sub || !payload?.tenantId) {
-      throw new UnauthorizedException()
+      throw new UnauthorizedException('Invalid token payload')
     }
     
-    // Fetch the full user object with relations
-    const user = await this.userRepository.findOne({
-      where: { id: payload.sub },
-      relations: ['tenant', 'role', 'role.permissions'],
-    })
-    
-    if (!user) {
-      throw new UnauthorizedException()
+    try {
+      // Fetch the full user object with relations using the service
+      const user = await this.usersService.findById(payload.sub)
+      
+      if (!user) {
+        throw new UnauthorizedException('User not found')
+      }
+      
+      // Ensure user has proper tenant association
+      if (user.tenant?.id !== payload.tenantId) {
+        throw new UnauthorizedException('Tenant mismatch')
+      }
+      
+      return user
+    } catch (error) {
+      console.error('JWT validation error:', error)
+      throw new UnauthorizedException('Token validation failed')
     }
-    
-    return user
   }
 }

@@ -10,17 +10,18 @@ import { Role } from '../rbac/role.entity'
 import { Permission } from '../rbac/permission.entity'
 import { JwtStrategy } from './jwt.strategy'
 import { LocalStrategy } from './local.strategy'
+import { UsersService } from '../users/users.service'
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([User, Tenant, Role, Permission]),
     PassportModule,
     JwtModule.register({
-      secret: process.env.JWT_SECRET || 'dev-secret-change-in-prod',
+      secret: process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-in-production',
       signOptions: { expiresIn: '12h' },
     }),
   ],
-  providers: [AuthService, JwtStrategy, LocalStrategy],
+  providers: [AuthService, JwtStrategy, LocalStrategy, UsersService],
   controllers: [AuthController],
   exports: [AuthService],
 })

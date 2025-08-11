@@ -51,4 +51,18 @@ export class UsersService {
     await this.roleRepo.save(role)
     return role
   }
+
+  async findById(userId: string): Promise<User | null> {
+    return this.userRepo.findOne({
+      where: { id: userId },
+      relations: ['tenant', 'role', 'role.permissions']
+    })
+  }
+
+  async findByEmail(email: string): Promise<User | null> {
+    return this.userRepo.findOne({
+      where: { email: email.toLowerCase() },
+      relations: ['tenant', 'role', 'role.permissions']
+    })
+  }
 }

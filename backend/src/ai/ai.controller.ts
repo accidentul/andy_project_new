@@ -2,21 +2,38 @@ import { Controller, Post, Get, Body, UseGuards, Request, Query, Param, Delete, 
 import { JwtAuthGuard } from '../auth/jwt-auth.guard'
 import { EnhancedAiService } from './ai.service.enhanced'
 import { AiService } from './ai.service'
+import { IsString, IsOptional, IsIn } from 'class-validator'
 
 class ChatQueryDto {
+  @IsString()
   query!: string
+  
+  @IsOptional()
+  @IsString()
   conversationId?: string
 }
 
 class DocumentAnalysisDto {
+  @IsString()
   documentContent!: string
+  
+  @IsString()
   documentName!: string
+  
+  @IsOptional()
+  @IsString()
   query?: string
 }
 
 class SeedDataDto {
+  @IsString()
   connectorId!: string
+  
+  @IsIn(['salesforce', 'hubspot'])
   provider!: 'salesforce' | 'hubspot'
+  
+  @IsOptional()
+  @IsIn(['small', 'medium', 'large'])
   volume?: 'small' | 'medium' | 'large'
 }
 
