@@ -115,6 +115,9 @@ export const apiClient = {
   },
 }
 
+// Alias for easier usage
+export const api = apiClient
+
 export async function listConnectors(): Promise<Connector[]> {
   return apiFetch('/api/connectors')
 }
