@@ -14,6 +14,7 @@ import {
   Rocket,
   Globe,
   ShieldCheck,
+  Shield,
   Users,
   Cloud,
 } from "lucide-react"
@@ -110,6 +111,16 @@ export function MobileNav({
                   >
                     <Brain className="h-3.5 w-3.5 mr-2" />
                     AI INSIGHTS
+                  </Button>
+                </li>
+                <li>
+                  <Button
+                    variant="ghost"
+                    className={`w-full justify-start text-white hover:bg-white/10 ${activeSection === "strategic-command" ? "bg-white/15 border-l-4 border-white" : ""} text-[10px] font-light tracking-wide`}
+                    onClick={() => handleNavClick("strategic-command")}
+                  >
+                    <Shield className="h-3.5 w-3.5 mr-2" />
+                    COMMAND CENTER
                   </Button>
                 </li>
                 <li>

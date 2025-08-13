@@ -30,6 +30,10 @@ import { QueryValidatorService } from './services/query-validator.service'
 import { SchemaSyncService } from './services/schema-sync.service'
 import { SeedDataService } from './seed-data.service'
 
+// Import AI Insights and Simulator modules
+import { InsightsModule } from './insights/insights.module'
+import { SimulatorModule } from './simulator/simulator.module'
+
 @Module({
   imports: [
     TypeOrmModule.forFeature([CrmAccount, CrmContact, CrmDeal, CrmActivity]),
@@ -41,6 +45,8 @@ import { SeedDataService } from './seed-data.service'
       secret: process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-in-production',
       signOptions: { expiresIn: '12h' },
     }),
+    InsightsModule,
+    SimulatorModule,
   ],
   controllers: [AiController, AiStreamingController],
   providers: [

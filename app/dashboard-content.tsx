@@ -16,6 +16,7 @@ import {
   Search,
   Settings,
   ShieldCheck,
+  Shield,
   Palette,
   LayoutGrid,
   Sliders,
@@ -26,6 +27,7 @@ import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import DashboardSection from "./sections/dashboard-section"
 import AIInsightsEngineSection from "./sections/ai-insights-engine-section"
+import StrategicCommandCenterSection from "./sections/strategic-command-center-section"
 import { BusinessMetricsSection } from "./sections/business-metrics-section"
 import { DataSourcesSection } from "./sections/data-sources-section"
 import { AutomatedActionsSection } from "./sections/automated-actions-section"
@@ -67,6 +69,7 @@ import { PlatformCustomizer } from "./components/platform-customizer"
 type NavSection =
   | "dashboard"
   | "ai-insights"
+  | "strategic-command"
   | "business-metrics"
   | "data-sources"
   | "automated-actions"
@@ -245,6 +248,8 @@ export default function DashboardContent() {
         return <DashboardSection subsidiary={selectedSubsidiary} />
       case "ai-insights":
         return <AIInsightsEngineSection />
+      case "strategic-command":
+        return <StrategicCommandCenterSection />
       case "business-metrics":
         return <BusinessMetricsSection highlightItem={activeNotification} subsidiary={selectedSubsidiary} />
       case "data-sources":
@@ -785,6 +790,22 @@ export default function DashboardContent() {
                   >
                     <Brain className={cn("h-3.5 w-3.5", sidebarExpanded ? "mr-2" : "")} />
                     {sidebarExpanded && <span>andi's INSIGHTS</span>}
+                  </Button>
+                </li>
+                <li>
+                  <Button
+                    variant="ghost"
+                    className={cn(
+                      "w-full text-white hover:bg-white/10 transition-all duration-500 ease-in-out",
+                      activeSection === "strategic-command" ? "bg-white/15 border-l-4 border-white" : "",
+                      sidebarExpanded
+                        ? "justify-start text-[10px] font-light tracking-wide pr-1"
+                        : "justify-center px-0",
+                    )}
+                    onClick={() => handleNavClick("strategic-command")}
+                  >
+                    <Shield className={cn("h-3.5 w-3.5", sidebarExpanded ? "mr-2" : "")} />
+                    {sidebarExpanded && <span>COMMAND CENTER</span>}
                   </Button>
                 </li>
                 <li>
