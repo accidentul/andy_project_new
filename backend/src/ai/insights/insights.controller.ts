@@ -239,7 +239,9 @@ export class InsightsController {
     try {
       const tenantId = req.user.tenantId
       const userId = req.user.sub
-      const role = req.user.role || 'user'
+      const role = typeof req.user.role === 'string' 
+        ? req.user.role 
+        : (req.user.role?.name || 'user')
       
       const widgets = await this.widgetService.generateSmartDashboard(
         tenantId,
@@ -302,7 +304,9 @@ export class InsightsController {
       // For now, generate a fresh dashboard
       const tenantId = req.user.tenantId
       const userId = req.user.sub
-      const role = req.user.role || 'user'
+      const role = typeof req.user.role === 'string' 
+        ? req.user.role 
+        : (req.user.role?.name || 'user')
       
       const widgets = await this.widgetService.generateSmartDashboard(
         tenantId,
@@ -354,7 +358,9 @@ export class InsightsController {
   async getDailyBriefing(@Request() req: any) {
     try {
       const tenantId = req.user.tenantId
-      const role = req.user.role || 'user'
+      const role = typeof req.user.role === 'string' 
+        ? req.user.role 
+        : (req.user.role?.name || 'user')
       
       // Get top insights
       const insights = await this.insightsService.getInsightsForTenant(tenantId, 5)

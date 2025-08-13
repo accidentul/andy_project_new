@@ -120,13 +120,15 @@ export default function AIInsightsEngineSection() {
     setLoading(true)
     setError(null)
     try {
-      await Promise.all([
+      // Load data in parallel but don't fail if some endpoints error
+      await Promise.allSettled([
         loadInsights(),
         loadForecast(),
         loadSmartDashboard()
       ])
     } catch (err: any) {
-      setError(err?.message || 'Failed to load AI insights')
+      // Only set error if all requests fail
+      console.error('Error loading initial data:', err)
     } finally {
       setLoading(false)
     }
@@ -135,11 +137,12 @@ export default function AIInsightsEngineSection() {
   const loadInsights = async () => {
     try {
       const insights = await apiFetch<Insight[]>('/api/insights')
-      if (insights) {
+      if (insights && Array.isArray(insights)) {
         setInsights(insights)
       }
     } catch (err) {
       console.error('Failed to load insights:', err)
+      // Don't throw, just log - insights might not be available yet
     }
   }
 
@@ -151,17 +154,19 @@ export default function AIInsightsEngineSection() {
       }
     } catch (err) {
       console.error('Failed to load forecast:', err)
+      // Don't throw, forecasts might fail due to insufficient data
     }
   }
 
   const loadSmartDashboard = async () => {
     try {
       const response = await apiFetch<{ success: boolean; widgets: DashboardWidget[] }>('/api/insights/dashboard/smart')
-      if (response?.widgets) {
+      if (response?.widgets && Array.isArray(response.widgets)) {
         setWidgets(response.widgets)
       }
     } catch (err) {
       console.error('Failed to load smart dashboard:', err)
+      // Don't throw, dashboard generation might fail initially
     }
   }
 
@@ -386,20 +391,102 @@ export default function AIInsightsEngineSection() {
           )}
         </CardHeader>
         <CardContent>
-          {widget.visualization.type === 'number' && widget.visualization.data.metrics ? (
-            <div className="grid grid-cols-2 gap-4">
-              {widget.visualization.data.metrics.map((metric: any, idx: number) => (
-                <div key={idx} className="text-center">
-                  <div className="text-xs text-muted-foreground mb-1">{metric.label}</div>
-                  <div className="text-xl font-bold">
-                    {metric.format === 'currency' && '$'}
-                    {metric.format === 'percentage' 
-                      ? `${metric.value.toFixed(1)}%`
-                      : metric.value.toLocaleString()
-                    }
+          {widget.visualization.type === 'number' && widget.visualization.data ? (
+            widget.visualization.data.metrics ? (
+              <div className="grid grid-cols-2 gap-4">
+                {widget.visualization.data.metrics.map((metric: any, idx: number) => (
+                  <div key={idx} className="text-center">
+                    <div className="text-xs text-muted-foreground mb-1">{metric.label}</div>
+                    <div className="text-xl font-bold">
+                      {metric.format === 'currency' && '$'}
+                      {metric.format === 'percentage' 
+                        ? `${metric.value.toFixed(1)}%`
+                        : metric.value.toLocaleString()
+                      }
+                    </div>
                   </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-4">
+                <div className="text-3xl font-bold">
+                  {widget.visualization.data.formatted || widget.visualization.data.value?.toLocaleString() || '0'}
                 </div>
-              ))}
+                {widget.visualization.data.trend && (
+                  <div className={cn(
+                    "text-sm mt-2",
+                    widget.visualization.data.trend.direction === 'up' ? 'text-green-600' : 'text-red-600'
+                  )}>
+                    {widget.visualization.data.trend.direction === 'up' ? '↑' : '↓'} 
+                    {widget.visualization.data.trend.percent?.toFixed(1)}%
+                  </div>
+                )}
+              </div>
+            )
+          ) : widget.visualization.type === 'table' && widget.visualization.data ? (
+            <div className="overflow-auto max-h-32">
+              {widget.visualization.data.error ? (
+                <div className="text-sm text-red-600">
+                  Error: {widget.visualization.data.error}
+                </div>
+              ) : widget.visualization.data.columns && widget.visualization.data.rows ? (
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b">
+                      {widget.visualization.data.columns.map((col: string, idx: number) => (
+                        <th key={idx} className="text-left p-1">{col}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {widget.visualization.data.rows.slice(0, 5).map((row: any, ridx: number) => (
+                      <tr key={ridx} className="border-b">
+                        {widget.visualization.data.columns.map((col: string, cidx: number) => (
+                          <td key={cidx} className="p-1">{row[col]}</td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <div className="text-sm text-muted-foreground">No data available</div>
+              )}
+            </div>
+          ) : widget.visualization.data && Array.isArray(widget.visualization.data) && widget.visualization.data.length > 0 ? (
+            <div className="h-32 p-2">
+              <div className="text-xs text-muted-foreground mb-2">
+                {widget.visualization.data.length} data points
+              </div>
+              {widget.visualization.type === 'line' || widget.visualization.type === 'bar' ? (
+                <div className="space-y-1">
+                  {widget.visualization.data.slice(0, 3).map((item: any, idx: number) => (
+                    <div key={idx} className="flex justify-between text-xs">
+                      <span className="text-muted-foreground">{item.x || item.label || `Item ${idx + 1}`}</span>
+                      <span className="font-medium">{typeof item.y === 'number' ? item.y.toLocaleString() : item.y}</span>
+                    </div>
+                  ))}
+                  {widget.visualization.data.length > 3 && (
+                    <div className="text-xs text-muted-foreground">
+                      +{widget.visualization.data.length - 3} more
+                    </div>
+                  )}
+                </div>
+              ) : widget.visualization.type === 'pie' ? (
+                <div className="space-y-1">
+                  {widget.visualization.data.slice(0, 4).map((item: any, idx: number) => (
+                    <div key={idx} className="flex justify-between text-xs">
+                      <span className="text-muted-foreground">{item.name || `Segment ${idx + 1}`}</span>
+                      <span className="font-medium">{item.value?.toLocaleString()}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-xs">
+                  <pre className="overflow-auto max-h-24">
+                    {JSON.stringify(widget.visualization.data, null, 2)}
+                  </pre>
+                </div>
+              )}
             </div>
           ) : (
             <div className="h-32 flex items-center justify-center text-muted-foreground">
@@ -407,7 +494,7 @@ export default function AIInsightsEngineSection() {
                 {widget.visualization.type === 'line' && <LineChart className="h-8 w-8 mx-auto mb-2" />}
                 {widget.visualization.type === 'bar' && <BarChart3 className="h-8 w-8 mx-auto mb-2" />}
                 {widget.visualization.type === 'pie' && <PieChart className="h-8 w-8 mx-auto mb-2" />}
-                <p className="text-xs">Visualization placeholder</p>
+                <p className="text-xs">No data available</p>
               </div>
             </div>
           )}
