@@ -25,7 +25,7 @@ import {
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import DashboardSection from "./sections/dashboard-section"
-import { AIInsightsSection } from "./sections/ai-insights-section"
+import AIInsightsEngineSection from "./sections/ai-insights-engine-section"
 import { BusinessMetricsSection } from "./sections/business-metrics-section"
 import { DataSourcesSection } from "./sections/data-sources-section"
 import { AutomatedActionsSection } from "./sections/automated-actions-section"
@@ -244,7 +244,7 @@ export default function DashboardContent() {
       case "dashboard":
         return <DashboardSection subsidiary={selectedSubsidiary} />
       case "ai-insights":
-        return <AIInsightsSection highlightItem={activeNotification} subsidiary={selectedSubsidiary} />
+        return <AIInsightsEngineSection />
       case "business-metrics":
         return <BusinessMetricsSection highlightItem={activeNotification} subsidiary={selectedSubsidiary} />
       case "data-sources":

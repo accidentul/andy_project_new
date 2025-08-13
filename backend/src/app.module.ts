@@ -21,6 +21,7 @@ import { AiModule } from './ai/ai.module'
 import { SeedModule } from './seed/seed.module'
 import { Connector } from './connectors/connector.entity'
 import { CrmAccount, CrmActivity, CrmContact, CrmDeal } from './connectors/unified-crm.entities'
+import { InsightsModule } from './ai/insights/insights.module'
 
 @Module({
   imports: [
@@ -38,6 +39,7 @@ import { CrmAccount, CrmActivity, CrmContact, CrmDeal } from './connectors/unifi
     ConnectorsModule,
     AiModule,
     SeedModule,
+    InsightsModule,
   ],
 })
 export class AppModule {}
