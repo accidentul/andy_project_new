@@ -197,6 +197,15 @@ export class DynamicSQLBuilder {
           col.expression
       }
       
+      // Special handling for SQL functions in column names (should be expressions)
+      if (col.column && col.column.includes('(') && col.column.includes(')')) {
+        // This looks like a SQL function that should be an expression
+        const expression = col.column
+        return col.alias ? 
+          `${expression} AS ${this.dialect.quoteIdentifier(col.alias)}` : 
+          expression
+      }
+      
       // Special handling for * in aggregations
       if (col.aggregation && col.column === '*') {
         const aggregated = `${col.aggregation}(*)`
@@ -305,7 +314,14 @@ export class DynamicSQLBuilder {
         
         default:
           const param = this.getParameterPlaceholder(paramIndex++)
-          params.push(cond.value)
+          // Handle context substitutions (e.g., ${context.tenantId})
+          let actualValue = cond.value
+          if (typeof cond.value === 'string' && cond.value.includes('${context.')) {
+            // This is a placeholder that wasn't substituted properly
+            // For now, pass it as-is, but log a warning
+            this.logger?.warn?.(`Unsubstituted context value: ${cond.value}`)
+          }
+          params.push(actualValue)
           return `${column} ${cond.operator} ${param}`
       }
     })

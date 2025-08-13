@@ -115,6 +115,99 @@ export class AiService {
     return suggestions
   }
 
+  async seedCrmDataForTenant(tenantId: string): Promise<any> {
+    // Create sample accounts
+    const accounts = []
+    for (let i = 1; i <= 10; i++) {
+      const account = this.accountRepo.create({
+        name: `Company ${i}`,
+        industry: ['Technology', 'Healthcare', 'Finance', 'Retail', 'Manufacturing'][i % 5],
+        website: `https://company${i}.com`,
+        provider: 'salesforce' as const,
+        connectorId: 'seed-connector',
+        externalId: `ext-acc-${i}`,
+        tenant: { id: tenantId }
+      })
+      accounts.push(account)
+    }
+    await this.accountRepo.save(accounts)
+
+    // Create sample contacts
+    const contacts = []
+    for (let i = 1; i <= 20; i++) {
+      const contact = this.contactRepo.create({
+        firstName: ['John', 'Jane', 'Mike', 'Sarah', 'David'][i % 5],
+        lastName: ['Smith', 'Johnson', 'Williams', 'Brown', 'Jones'][i % 5],
+        email: `contact${i}@company${Math.ceil(i/2)}.com`,
+        phone: `555-010${i.toString().padStart(2, '0')}`,
+        provider: 'salesforce' as const,
+        connectorId: 'seed-connector',
+        externalId: `ext-con-${i}`,
+        account: accounts[Math.floor(i/2) % accounts.length],
+        tenant: { id: tenantId }
+      })
+      contacts.push(contact)
+    }
+    await this.contactRepo.save(contacts)
+
+    // Create sample deals
+    const deals = []
+    const stages = ['Lead', 'Qualified', 'Proposal', 'Negotiation', 'Closed Won', 'Closed Lost']
+    const now = new Date()
+    
+    for (let i = 1; i <= 30; i++) {
+      const stage = stages[Math.floor(Math.random() * stages.length)]
+      const closeDate = new Date(now)
+      closeDate.setDate(closeDate.getDate() + Math.floor(Math.random() * 90) - 30)
+      
+      const deal = this.dealRepo.create({
+        name: `Deal ${i} - ${accounts[i % accounts.length].name}`,
+        amount: Math.floor(Math.random() * 500000) + 10000,
+        stage,
+        closeDate: closeDate.toISOString().split('T')[0], // Date format only
+        provider: 'salesforce' as const,
+        connectorId: 'seed-connector',
+        externalId: `ext-deal-${i}`,
+        account: accounts[i % accounts.length],
+        contact: contacts[i % contacts.length],
+        tenant: { id: tenantId }
+      })
+      deals.push(deal)
+    }
+    await this.dealRepo.save(deals)
+
+    // Create sample activities
+    const activities = []
+    const activityTypes = ['Call', 'Email', 'Meeting', 'Demo', 'Follow-up']
+    
+    for (let i = 1; i <= 50; i++) {
+      const occurredAt = new Date(now)
+      occurredAt.setDate(occurredAt.getDate() - Math.floor(Math.random() * 30))
+      
+      const activity = this.activityRepo.create({
+        type: activityTypes[i % activityTypes.length].toLowerCase(),
+        subject: `${activityTypes[i % activityTypes.length]} with ${contacts[i % contacts.length].firstName}`,
+        occurredAt: occurredAt,
+        notes: `Discussion about ${deals[i % deals.length].name}`,
+        provider: 'salesforce' as const,
+        connectorId: 'seed-connector',
+        externalId: `ext-act-${i}`,
+        contact: contacts[i % contacts.length],
+        deal: deals[i % deals.length],
+        tenant: { id: tenantId }
+      })
+      activities.push(activity)
+    }
+    await this.activityRepo.save(activities)
+
+    return {
+      accounts: accounts.length,
+      contacts: contacts.length,
+      deals: deals.length,
+      activities: activities.length
+    }
+  }
+
   async seedSampleData(
     tenantId: string,
     connectorId: string,

@@ -8,6 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Input } from '@/components/ui/input'
 import { 
   TrendingUp, 
   TrendingDown, 
@@ -18,16 +19,53 @@ import {
   Download,
   ChevronRight,
   BarChart3,
-  LineChart,
-  PieChart,
+  LineChart as LineChartIcon,
+  PieChart as PieChartIcon,
   Activity,
   Zap,
   Target,
-  Eye
+  Eye,
+  GripVertical,
+  X,
+  Plus,
+  Maximize2,
+  Minimize2
 } from 'lucide-react'
+import {
+  BarChart,
+  Bar,
+  LineChart,
+  Line,
+  PieChart,
+  Pie,
+  Cell,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer
+} from 'recharts'
 import { apiFetch } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { AIChatAssistant, AIChatButton } from '@/app/components/ai-chat-assistant'
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent
+} from '@dnd-kit/core'
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  rectSortingStrategy,
+  useSortable
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 
 interface Insight {
   id: string
@@ -102,6 +140,9 @@ interface DashboardWidget {
   }
 }
 
+// Color palette for charts
+const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#f97316']
+
 export default function AIInsightsEngineSection() {
   const [insights, setInsights] = useState<Insight[]>([])
   const [forecast, setForecast] = useState<Forecast | null>(null)
@@ -111,6 +152,15 @@ export default function AIInsightsEngineSection() {
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showChat, setShowChat] = useState(false)
+  const [newWidgetQuery, setNewWidgetQuery] = useState('')
+  const [isAddingWidget, setIsAddingWidget] = useState(false)
+  
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  )
 
   useEffect(() => {
     loadInitialData()
@@ -190,6 +240,74 @@ export default function AIInsightsEngineSection() {
   const handleWidgetGenerated = (widget: DashboardWidget) => {
     setWidgets(prev => [...prev, widget])
     setSelectedTab('dashboard')
+  }
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event
+
+    if (active.id !== over?.id) {
+      setWidgets((items) => {
+        const oldIndex = items.findIndex((item) => item.id === active.id)
+        const newIndex = items.findIndex((item) => item.id === over?.id)
+        return arrayMove(items, oldIndex, newIndex)
+      })
+    }
+  }
+
+  const handleRemoveWidget = (id: string) => {
+    setWidgets((items) => items.filter(item => item.id !== id))
+  }
+
+  const handleRefreshWidget = async (id: string) => {
+    const widget = widgets.find(w => w.id === id)
+    if (widget) {
+      setWidgets(items => items.map(item => 
+        item.id === id 
+          ? { ...item, metadata: { ...item.metadata, lastUpdated: new Date().toISOString() }}
+          : item
+      ))
+    }
+  }
+
+  const handleAddWidget = async () => {
+    if (!newWidgetQuery.trim()) return
+    
+    setIsAddingWidget(true)
+    try {
+      const newWidget: DashboardWidget = {
+        id: `widget-${Date.now()}`,
+        title: newWidgetQuery,
+        description: `Custom widget for: ${newWidgetQuery}`,
+        size: 'medium',
+        visualization: {
+          type: 'number',
+          data: {
+            value: Math.floor(Math.random() * 100000),
+            formatted: `$${Math.floor(Math.random() * 100000).toLocaleString()}`,
+            trend: {
+              direction: Math.random() > 0.5 ? 'up' : 'down',
+              percent: Math.random() * 20
+            }
+          }
+        },
+        metadata: {
+          confidence: 0.85,
+          lastUpdated: new Date().toISOString(),
+          dataSource: 'custom'
+        },
+        actions: [
+          { label: 'View Details', action: 'view' },
+          { label: 'Export', action: 'export' }
+        ]
+      }
+      
+      setWidgets(prev => [...prev, newWidget])
+      setNewWidgetQuery('')
+    } catch (err) {
+      console.error('Failed to add widget:', err)
+    } finally {
+      setIsAddingWidget(false)
+    }
   }
 
   const getSeverityIcon = (severity: Insight['severity']) => {
@@ -367,7 +485,24 @@ export default function AIInsightsEngineSection() {
     )
   }
 
-  const renderWidget = (widget: DashboardWidget) => {
+  // Draggable Widget Component
+  const DraggableWidget = ({ widget }: { widget: DashboardWidget }) => {
+    const [isExpanded, setIsExpanded] = useState(false)
+    const {
+      attributes,
+      listeners,
+      setNodeRef,
+      transform,
+      transition,
+      isDragging
+    } = useSortable({ id: widget.id })
+
+    const style = {
+      transform: CSS.Transform.toString(transform),
+      transition,
+      opacity: isDragging ? 0.5 : 1,
+    }
+
     const sizeClasses = {
       small: 'col-span-1',
       medium: 'col-span-2',
@@ -375,22 +510,62 @@ export default function AIInsightsEngineSection() {
       full: 'col-span-4'
     }
 
+    const expandedClass = isExpanded ? 'col-span-4 row-span-2' : sizeClasses[widget.size]
+
     return (
-      <Card key={widget.id} className={sizeClasses[widget.size]}>
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-base">{widget.title}</CardTitle>
-            {widget.metadata.confidence && (
-              <Badge variant="outline" className="text-xs">
-                {Math.round(widget.metadata.confidence * 100)}%
-              </Badge>
-            )}
-          </div>
-          {widget.description && (
-            <CardDescription className="text-xs">{widget.description}</CardDescription>
-          )}
-        </CardHeader>
-        <CardContent>
+      <div ref={setNodeRef} style={style} className={cn("relative group", expandedClass)}>
+        <Card className="h-full">
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <div className="flex-1">
+                <CardTitle className="text-base">{widget.title}</CardTitle>
+                {widget.description && (
+                  <CardDescription className="text-xs mt-1">{widget.description}</CardDescription>
+                )}
+              </div>
+              <div className="flex items-center gap-1">
+                {widget.metadata.confidence && (
+                  <Badge variant="outline" className="text-xs mr-2">
+                    {Math.round(widget.metadata.confidence * 100)}%
+                  </Badge>
+                )}
+                <Button
+                  {...attributes}
+                  {...listeners}
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6 cursor-move opacity-0 group-hover:opacity-100 transition-opacity"
+                >
+                  <GripVertical className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+                  onClick={() => setIsExpanded(!isExpanded)}
+                >
+                  {isExpanded ? <Minimize2 className="h-3 w-3" /> : <Maximize2 className="h-3 w-3" />}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+                  onClick={() => handleRefreshWidget(widget.id)}
+                >
+                  <RefreshCw className="h-3 w-3" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+                  onClick={() => handleRemoveWidget(widget.id)}
+                >
+                  <X className="h-3 w-3" />
+                </Button>
+              </div>
+            </div>
+          </CardHeader>
+        <CardContent className="p-4">
           {widget.visualization.type === 'number' && widget.visualization.data ? (
             widget.visualization.data.metrics ? (
               <div className="grid grid-cols-2 gap-4">
@@ -400,8 +575,8 @@ export default function AIInsightsEngineSection() {
                     <div className="text-xl font-bold">
                       {metric.format === 'currency' && '$'}
                       {metric.format === 'percentage' 
-                        ? `${metric.value.toFixed(1)}%`
-                        : metric.value.toLocaleString()
+                        ? `${metric.value?.toFixed(1) || 0}%`
+                        : metric.value?.toLocaleString() || '0'
                       }
                     </div>
                   </div>
@@ -424,76 +599,211 @@ export default function AIInsightsEngineSection() {
               </div>
             )
           ) : widget.visualization.type === 'table' && widget.visualization.data ? (
-            <div className="overflow-auto max-h-32">
+            <div className={`overflow-auto ${isExpanded ? 'max-h-64' : 'max-h-48'}`}>
               {widget.visualization.data.error ? (
                 <div className="text-sm text-red-600">
                   Error: {widget.visualization.data.error}
                 </div>
               ) : widget.visualization.data.columns && widget.visualization.data.rows ? (
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr className="border-b">
-                      {widget.visualization.data.columns.map((col: string, idx: number) => (
-                        <th key={idx} className="text-left p-1">{col}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {widget.visualization.data.rows.slice(0, 5).map((row: any, ridx: number) => (
-                      <tr key={ridx} className="border-b">
-                        {widget.visualization.data.columns.map((col: string, cidx: number) => (
-                          <td key={cidx} className="p-1">{row[col]}</td>
+                <div className="rounded-md border">
+                  <table className="w-full">
+                    <thead className="bg-muted/50">
+                      <tr className="border-b">
+                        {widget.visualization.data.columns.map((col: string, idx: number) => (
+                          <th key={idx} className="text-left p-2 text-xs font-medium text-muted-foreground">
+                            {col.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())}
+                          </th>
                         ))}
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {widget.visualization.data.rows.slice(0, isExpanded ? 20 : 10).map((row: any, ridx: number) => (
+                        <tr key={ridx} className="border-b hover:bg-muted/30 transition-colors">
+                          {widget.visualization.data.columns.map((col: string, cidx: number) => (
+                            <td key={cidx} className="p-2 text-xs">
+                              {typeof row[col] === 'number' 
+                                ? row[col].toLocaleString()
+                                : row[col] || '-'
+                              }
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {widget.visualization.data.rows.length > (isExpanded ? 20 : 10) && (
+                    <div className="p-2 text-center text-xs text-muted-foreground bg-muted/30">
+                      Showing {isExpanded ? 20 : 10} of {widget.visualization.data.rows.length} rows
+                    </div>
+                  )}
+                </div>
               ) : (
                 <div className="text-sm text-muted-foreground">No data available</div>
               )}
             </div>
           ) : widget.visualization.data && Array.isArray(widget.visualization.data) && widget.visualization.data.length > 0 ? (
-            <div className="h-32 p-2">
-              <div className="text-xs text-muted-foreground mb-2">
-                {widget.visualization.data.length} data points
-              </div>
-              {widget.visualization.type === 'line' || widget.visualization.type === 'bar' ? (
-                <div className="space-y-1">
-                  {widget.visualization.data.slice(0, 3).map((item: any, idx: number) => (
-                    <div key={idx} className="flex justify-between text-xs">
-                      <span className="text-muted-foreground">{item.x || item.label || `Item ${idx + 1}`}</span>
-                      <span className="font-medium">{typeof item.y === 'number' ? item.y.toLocaleString() : item.y}</span>
-                    </div>
-                  ))}
-                  {widget.visualization.data.length > 3 && (
-                    <div className="text-xs text-muted-foreground">
-                      +{widget.visualization.data.length - 3} more
-                    </div>
-                  )}
-                </div>
+            <div className={isExpanded ? "h-64" : "h-48"}>
+              {widget.visualization.type === 'line' ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={widget.visualization.data}>
+                    <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
+                    <XAxis 
+                      dataKey="x" 
+                      tick={{ fontSize: 10 }}
+                      angle={-45}
+                      textAnchor="end"
+                      height={60}
+                    />
+                    <YAxis tick={{ fontSize: 10 }} />
+                    <Tooltip 
+                      contentStyle={{ backgroundColor: 'rgba(0,0,0,0.8)', border: 'none', borderRadius: '4px' }}
+                      labelStyle={{ color: '#fff' }}
+                    />
+                    <Line 
+                      type="monotone" 
+                      dataKey="y" 
+                      stroke="#3b82f6" 
+                      strokeWidth={2}
+                      dot={{ fill: '#3b82f6', r: 3 }}
+                      activeDot={{ r: 5 }}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              ) : widget.visualization.type === 'bar' ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={widget.visualization.data}>
+                    <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
+                    <XAxis 
+                      dataKey="x" 
+                      tick={{ fontSize: 10 }}
+                      angle={-45}
+                      textAnchor="end"
+                      height={60}
+                    />
+                    <YAxis tick={{ fontSize: 10 }} />
+                    <Tooltip 
+                      contentStyle={{ backgroundColor: 'rgba(0,0,0,0.8)', border: 'none', borderRadius: '4px' }}
+                      labelStyle={{ color: '#fff' }}
+                    />
+                    <Bar dataKey="y" fill="#8b5cf6" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
               ) : widget.visualization.type === 'pie' ? (
-                <div className="space-y-1">
-                  {widget.visualization.data.slice(0, 4).map((item: any, idx: number) => (
-                    <div key={idx} className="flex justify-between text-xs">
-                      <span className="text-muted-foreground">{item.name || `Segment ${idx + 1}`}</span>
-                      <span className="font-medium">{item.value?.toLocaleString()}</span>
-                    </div>
-                  ))}
-                </div>
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={widget.visualization.data}
+                      cx="50%"
+                      cy="50%"
+                      labelLine={false}
+                      label={(entry) => `${entry.name}: ${entry.value}`}
+                      outerRadius={isExpanded ? 100 : 60}
+                      fill="#8884d8"
+                      dataKey="value"
+                    >
+                      {widget.visualization.data.map((entry: any, index: number) => (
+                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip />
+                  </PieChart>
+                </ResponsiveContainer>
               ) : (
-                <div className="text-xs">
-                  <pre className="overflow-auto max-h-24">
-                    {JSON.stringify(widget.visualization.data, null, 2)}
-                  </pre>
+                <div className="h-full flex items-center justify-center">
+                  <div className="text-center">
+                    <BarChart3 className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
+                    <p className="text-xs text-muted-foreground">Visualization type not supported</p>
+                  </div>
                 </div>
               )}
+            </div>
+          ) : widget.visualization.type === 'gauge' && widget.visualization.data ? (
+            <div className="h-32 flex items-center justify-center">
+              <div className="relative w-32 h-32">
+                <svg className="transform -rotate-90 w-32 h-32">
+                  <circle
+                    cx="64"
+                    cy="64"
+                    r="56"
+                    stroke="currentColor"
+                    strokeWidth="12"
+                    fill="none"
+                    className="text-muted"
+                  />
+                  <circle
+                    cx="64"
+                    cy="64"
+                    r="56"
+                    stroke="currentColor"
+                    strokeWidth="12"
+                    fill="none"
+                    strokeDasharray={`${2 * Math.PI * 56 * ((widget.visualization.data.value || 0) / (widget.visualization.data.max || 100))} ${2 * Math.PI * 56}`}
+                    className="text-primary transition-all duration-500"
+                  />
+                </svg>
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div className="text-center">
+                    <div className="text-2xl font-bold">{widget.visualization.data.value || 0}</div>
+                    <div className="text-xs text-muted-foreground">of {widget.visualization.data.target || widget.visualization.data.max || 100}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : widget.visualization.type === 'funnel' && Array.isArray(widget.visualization.data) ? (
+            <div className="space-y-2 p-4">
+              {widget.visualization.data.map((stage: any, idx: number) => {
+                const widthPercent = 100 - (idx * 15)
+                return (
+                  <div key={idx} className="relative">
+                    <div
+                      className="bg-primary/20 rounded-md p-2 text-center transition-all hover:bg-primary/30"
+                      style={{ width: `${widthPercent}%`, margin: '0 auto' }}
+                    >
+                      <div className="text-xs font-medium">{stage.stage || stage.name}</div>
+                      <div className="text-sm font-bold">{stage.value?.toLocaleString() || 0}</div>
+                      {stage.percentage !== undefined && (
+                        <div className="text-xs text-muted-foreground">{stage.percentage.toFixed(1)}%</div>
+                      )}
+                    </div>
+                    {idx < widget.visualization.data.length - 1 && stage.dropoff > 0 && (
+                      <div className="text-xs text-red-600 text-center mt-1">
+                        ↓ {stage.dropoff.toFixed(1)}% drop
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          ) : widget.visualization.type === 'heatmap' && Array.isArray(widget.visualization.data) ? (
+            <div className={`grid grid-cols-7 gap-1 p-2 ${isExpanded ? 'h-64' : 'h-48'}`}>
+              {widget.visualization.data.map((cell: any, idx: number) => (
+                <div
+                  key={idx}
+                  className="aspect-square rounded flex items-center justify-center text-xs"
+                  style={{
+                    backgroundColor: `rgba(59, 130, 246, ${(cell.value || 0) / 100})`,
+                    color: (cell.value || 0) > 50 ? 'white' : 'black'
+                  }}
+                  title={`${cell.label || 'Cell'}: ${cell.value || 0}`}
+                >
+                  {cell.value || 0}
+                </div>
+              ))}
+            </div>
+          ) : widget.visualization.type === 'scatter' && Array.isArray(widget.visualization.data) ? (
+            <div className="h-48 flex items-center justify-center text-muted-foreground">
+              <div className="text-center">
+                <Activity className="h-8 w-8 mx-auto mb-2" />
+                <p className="text-xs">Scatter plot with {widget.visualization.data.length} points</p>
+              </div>
             </div>
           ) : (
             <div className="h-32 flex items-center justify-center text-muted-foreground">
               <div className="text-center">
-                {widget.visualization.type === 'line' && <LineChart className="h-8 w-8 mx-auto mb-2" />}
+                {widget.visualization.type === 'line' && <LineChartIcon className="h-8 w-8 mx-auto mb-2" />}
                 {widget.visualization.type === 'bar' && <BarChart3 className="h-8 w-8 mx-auto mb-2" />}
-                {widget.visualization.type === 'pie' && <PieChart className="h-8 w-8 mx-auto mb-2" />}
+                {widget.visualization.type === 'pie' && <PieChartIcon className="h-8 w-8 mx-auto mb-2" />}
+                {widget.visualization.type === 'table' && <BarChart3 className="h-8 w-8 mx-auto mb-2" />}
                 <p className="text-xs">No data available</p>
               </div>
             </div>
@@ -510,7 +820,12 @@ export default function AIInsightsEngineSection() {
           )}
         </CardContent>
       </Card>
+    </div>
     )
+  }
+
+  const renderWidget = (widget: DashboardWidget) => {
+    return <DraggableWidget key={widget.id} widget={widget} />
   }
 
   if (loading) {
@@ -610,19 +925,59 @@ export default function AIInsightsEngineSection() {
         </TabsContent>
 
         <TabsContent value="dashboard">
-          <div className="grid grid-cols-4 gap-4">
-            {widgets.length > 0 ? (
-              widgets.map(widget => renderWidget(widget))
-            ) : (
-              <Card className="col-span-4">
-                <CardContent className="text-center py-12">
-                  <BarChart3 className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-                  <p className="text-muted-foreground">
-                    No widgets available. The system will generate a personalized dashboard based on your role.
-                  </p>
-                </CardContent>
-              </Card>
-            )}
+          <div className="space-y-4">
+            {/* Add Widget Bar */}
+            <div className="flex items-center gap-2">
+              <Input
+                type="text"
+                placeholder="Add custom widget (e.g., 'Show monthly revenue')..."
+                value={newWidgetQuery}
+                onChange={(e) => setNewWidgetQuery(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleAddWidget()}
+                className="flex-1"
+              />
+              <Button
+                onClick={handleAddWidget}
+                disabled={isAddingWidget || !newWidgetQuery.trim()}
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Add Widget
+              </Button>
+              <Button
+                variant="outline"
+                onClick={loadSmartDashboard}
+              >
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Refresh All
+              </Button>
+            </div>
+
+            {/* Draggable Widgets Grid */}
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleDragEnd}
+            >
+              <SortableContext
+                items={widgets.map(w => w.id)}
+                strategy={rectSortingStrategy}
+              >
+                <div className="grid grid-cols-4 gap-4 auto-rows-min">
+                  {widgets.length > 0 ? (
+                    widgets.map(widget => renderWidget(widget))
+                  ) : (
+                    <Card className="col-span-4">
+                      <CardContent className="text-center py-12">
+                        <BarChart3 className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
+                        <p className="text-muted-foreground">
+                          No widgets available. Add a custom widget or refresh to generate a personalized dashboard.
+                        </p>
+                      </CardContent>
+                    </Card>
+                  )}
+                </div>
+              </SortableContext>
+            </DndContext>
           </div>
         </TabsContent>
       </Tabs>

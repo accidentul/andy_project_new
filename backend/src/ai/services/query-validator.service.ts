@@ -110,22 +110,39 @@ export class QueryValidatorService {
       } else {
         // Verify all non-aggregated columns are in GROUP BY
         for (const col of nonAggregatedColumns) {
-          const isInGroupBy = correctedPlan.groupBy.some(g => 
-            g.column === col.column && 
-            (g.table === col.table || g.table === correctedPlan.primaryTable)
-          )
+          const isInGroupBy = correctedPlan.groupBy.some(g => {
+            // Check for exact column match
+            const exactMatch = g.column === col.column && 
+              (g.table === col.table || g.table === correctedPlan.primaryTable)
+            
+            // Check if it's covered by an expression (for computed columns like dates)
+            const expressionMatch = g.expression && col.expression && 
+              g.expression.includes(col.column)
+            
+            // Check if column alias matches an existing expression
+            const aliasMatch = col.alias && g.expression && 
+              g.expression.toLowerCase().includes(col.alias.toLowerCase())
+            
+            return exactMatch || expressionMatch || aliasMatch
+          })
           
           if (!isInGroupBy) {
-            correctedPlan.groupBy.push({
-              table: col.table || correctedPlan.primaryTable,
-              column: col.column
-            })
+            // Don't add if this is an expression column that's already handled
+            const isExpressionColumn = col.expression || 
+              (col.alias && correctedPlan.groupBy.some(g => g.expression))
             
-            validation.corrections.push({
-              type: 'add_group_by',
-              description: `Added missing GROUP BY column: ${col.column}`,
-              applied: true
-            })
+            if (!isExpressionColumn) {
+              correctedPlan.groupBy.push({
+                table: col.table || correctedPlan.primaryTable,
+                column: col.column
+              })
+              
+              validation.corrections.push({
+                type: 'add_group_by',
+                description: `Added missing GROUP BY column: ${col.column}`,
+                applied: true
+              })
+            }
           }
         }
       }

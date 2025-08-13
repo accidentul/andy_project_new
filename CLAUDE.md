@@ -226,3 +226,41 @@ The application uses **Vercel AI SDK** with custom tools and agents for AI funct
 - Role-based tool access control enforced
 - All tools use Zod for runtime validation
 - Streaming responses supported via Server-Sent Events
+
+## AI Insights Engine & Widget Generation
+
+### CRITICAL: Always Use AI-Enhanced Query System
+**⚠️ MANDATORY**: All widget generation and dashboard queries MUST use the AI-enhanced query system via `WidgetGenerationService.generateWidgetFromQuery()`. This is the ONLY system that works correctly.
+
+**❌ NEVER use**:
+- Hardcoded SQL queries in widgets
+- Direct database queries without AI planning
+- Sample/mock data for widgets
+- Bypassing the AI query planner
+
+**✅ ALWAYS use**:
+- `WidgetGenerationService.generateWidgetFromQuery(naturalLanguageQuery, tenantId, userId)`
+- AI query planner for all data visualization needs
+- Real database data through the AI-enhanced pipeline
+- Proper {x,y} data format transformation
+
+### Widget Generation Architecture
+The AI Insights Engine uses a complete pipeline:
+1. **Natural Language Input** → `AIQueryPlannerService`
+2. **Query Planning** → SQL generation with tenant isolation
+3. **Data Retrieval** → Real database queries
+4. **Data Transformation** → Proper {x,y} format for charts
+5. **Visualization Rendering** → Recharts components
+
+### Example Usage
+```typescript
+// ✅ CORRECT - Always use AI-enhanced queries
+const widget = await this.widgetService.generateWidgetFromQuery(
+  'Monthly revenue trend for last 6 months',
+  tenantId,
+  userId
+)
+
+// ❌ WRONG - Never use hardcoded queries
+// const hardcodedWidget = await this.generateHardcodedWidget()
+```

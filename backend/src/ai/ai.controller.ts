@@ -180,6 +180,26 @@ export class AiController {
     }
   }
 
+  @Post('seed/crm-data')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  async seedCrmData(@Request() req: any) {
+    const tenantId = req.user.tenantId || req.user.tenant?.id
+    
+    if (!tenantId) {
+      throw new BadRequestException('Tenant ID not found')
+    }
+    
+    // Generate sample CRM data
+    const result = await this.aiService.seedCrmDataForTenant(tenantId)
+    
+    return {
+      success: true,
+      message: 'CRM data seeded successfully',
+      data: result
+    }
+  }
+
   @Get('available-roles')
   @UseGuards(JwtAuthGuard)
   async getAvailableRoles() {

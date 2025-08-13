@@ -237,17 +237,23 @@ export class InsightsController {
   @Get('dashboard/smart')
   async getSmartDashboard(@Request() req: any) {
     try {
-      const tenantId = req.user.tenantId
-      const userId = req.user.sub
+      this.logger.log(`🚀 SMART DASHBOARD REQUEST RECEIVED`)
+      this.logger.log(`User object: ${JSON.stringify(req.user)}`)
+      const tenantId = req.user.tenantId || req.user.tenant?.id
+      const userId = req.user.sub || req.user.id
       const role = typeof req.user.role === 'string' 
         ? req.user.role 
         : (req.user.role?.name || 'user')
       
+      this.logger.log(`🔍 Extracted - tenantId: ${tenantId}, userId: ${userId}, role: ${role}`)
+      
+      this.logger.log(`📞 CALLING widgetService.generateSmartDashboard`)
       const widgets = await this.widgetService.generateSmartDashboard(
         tenantId,
         userId,
         role
       )
+      this.logger.log(`📦 RECEIVED ${widgets.length} widgets from service`)
       
       return {
         success: true,
