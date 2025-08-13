@@ -537,7 +537,8 @@ export class WidgetGenerationService {
   ): Promise<DashboardWidget[]> {
     const widgets: DashboardWidget[] = []
     
-    switch (role.toLowerCase()) {
+    const normalizedRole = (role || 'user').toLowerCase()
+    switch (normalizedRole) {
       case 'ceo':
       case 'admin':
         widgets.push(

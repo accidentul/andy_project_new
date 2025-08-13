@@ -17,7 +17,7 @@ import { InsightsDiscoveryService } from './insights-discovery.service'
 import { PredictiveAnalyticsService } from './predictive-analytics.service'
 import { WidgetGenerationService, DashboardWidget } from './widget-generation.service'
 
-@Controller('api/insights')
+@Controller('insights')
 @UseGuards(JwtAuthGuard)
 export class InsightsController {
   private readonly logger = new Logger(InsightsController.name)

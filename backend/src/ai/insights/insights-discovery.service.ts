@@ -218,7 +218,7 @@ export class InsightsDiscoveryService {
       const dealStats = await this.dealRepo
         .createQueryBuilder('deal')
         .select('AVG(deal.amount) as avg_amount')
-        .addSelect('STDDEV(deal.amount) as std_dev')
+        .addSelect('AVG(ABS(deal.amount - (SELECT AVG(amount) FROM crm_deals WHERE tenantId = :tenantId))) as std_dev')
         .where('deal.tenantId = :tenantId', { tenantId })
         .getRawOne()
       

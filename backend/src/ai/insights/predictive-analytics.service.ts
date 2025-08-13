@@ -326,7 +326,7 @@ export class PredictiveAnalyticsService {
       }),
       this.dealRepo
         .createQueryBuilder('deal')
-        .select('COUNT(DISTINCT deal.ownerId) as count')
+        .select('COUNT(DISTINCT deal.id) as count')
         .where('deal.tenantId = :tenantId', { tenantId })
         .getRawOne()
     ])
