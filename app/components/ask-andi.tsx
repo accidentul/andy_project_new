@@ -1,7 +1,6 @@
 "use client"
 
 import type React from "react"
-
 import { useState, useRef, useEffect } from "react"
 import { Send, Brain, FileText, PieChart, Mic, X } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -9,12 +8,17 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { LineChart } from "./line-chart"
 import { BarChart } from "./bar-chart"
+import { SimplePieChart } from "./pie-chart-simple"
+import { SimpleTable } from "./simple-table"
 import { motion, AnimatePresence } from "framer-motion"
+import ReactMarkdown from 'react-markdown'
 
 interface ChatMessage {
   role: "user" | "system"
   content: string
   attachment?: "chart" | "report" | "pie" | "bar" | null
+  isStreaming?: boolean
+  visualization?: any
 }
 
 interface AskAndiProps {
@@ -27,13 +31,14 @@ export function AskAndi({ isOpen, onClose }: AskAndiProps) {
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
     {
       role: "system",
-      content: "Hello! I'm ANDI, your Adaptive Neural Data Intelligence assistant. How can I help you today?",
+      content: "Hello! I'm ANDI, your Adaptive Neural Data Intelligence assistant. How can I help you analyze your business data today?",
     },
   ])
   const [isTyping, setIsTyping] = useState(false)
   const [isListening, setIsListening] = useState(false)
   const chatContainerRef = useRef<HTMLDivElement>(null)
   const recognitionRef = useRef<SpeechRecognition | null>(null)
+  const abortControllerRef = useRef<AbortController | null>(null)
 
   // Scroll to bottom when messages change
   useEffect(() => {
@@ -95,9 +100,14 @@ export function AskAndi({ isOpen, onClose }: AskAndiProps) {
   }
 
   // Handle chat input
-  const handleChatSubmit = (e: React.FormEvent) => {
+  const handleChatSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!chatInput.trim()) return
+
+    // Abort any existing request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
+    }
 
     // Add user message
     const userMessage: ChatMessage = {
@@ -108,225 +118,415 @@ export function AskAndi({ isOpen, onClose }: AskAndiProps) {
     setChatInput("")
     setIsTyping(true)
 
-    // Simulate AI response
-    setTimeout(() => {
-      let response: ChatMessage = {
-        role: "system",
-        content: "I'm analyzing your request...",
+    // Create new response message
+    const responseMessage: ChatMessage = {
+      role: "system",
+      content: "",
+      isStreaming: true,
+    }
+    setChatMessages((prev) => [...prev, responseMessage])
+
+    try {
+      // Get auth token from localStorage (using the correct key)
+      const token = localStorage.getItem('andi_token')
+      if (!token) {
+        setChatMessages((prev) => {
+          const messages = [...prev]
+          messages[messages.length - 1] = {
+            role: "system",
+            content: "Please log in to continue.",
+            isStreaming: false,
+          }
+          return messages
+        })
+        setIsTyping(false)
+        return
       }
 
-      if (chatInput.toLowerCase().includes("sales") && chatInput.toLowerCase().includes("down")) {
-        response = {
-          role: "system",
-          content:
-            "Based on my analysis, sales are down 12% this quarter primarily due to three factors:\n\n" +
-            "1. Seasonal fluctuations (contributing ~40% of the decline)\n" +
-            "2. Increased competitor activity in your core markets (contributing ~35%)\n" +
-            "3. Supply chain disruptions affecting product availability (contributing ~25%)\n\n" +
-            "I've prepared a sales trend chart for the last 6 months:",
-          attachment: "chart",
+      // Create abort controller for this request
+      abortControllerRef.current = new AbortController()
+
+      // Make API request to streaming endpoint
+      const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:4000'
+      const response = await fetch(
+        `${apiBase}/api/ai/chat/stream?query=${encodeURIComponent(chatInput)}&token=${encodeURIComponent(token)}`,
+        {
+          method: 'GET',
+          signal: abortControllerRef.current.signal,
         }
-      } else if (
-        chatInput.toLowerCase().includes("increase") &&
-        (chatInput.toLowerCase().includes("revenue") || chatInput.toLowerCase().includes("sales"))
-      ) {
-        response = {
-          role: "system",
-          content:
-            "To increase revenue, I recommend these data-driven actions:\n\n" +
-            "1. Implement targeted promotions for your top 20% customers who haven't purchased in 30+ days\n" +
-            "2. Optimize pricing for products with high elasticity - I've identified 5 products with potential for 5-8% price increases\n" +
-            "3. Reallocate $15,000 from underperforming marketing channels to high-ROI campaigns\n\n" +
-            "Here's a breakdown of revenue opportunities by channel:",
-          attachment: "bar",
+      )
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+
+      // Read the stream with proper UTF-8 decoding
+      const reader = response.body?.getReader()
+      const decoder = new TextDecoder('utf-8')
+      let buffer = ""
+      let lastContent = ""
+      let lastVisualization = null
+
+      if (reader) {
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+
+          // Decode with proper UTF-8 handling
+          const chunk = decoder.decode(value, { stream: true })
+          buffer += chunk
+
+          // Process complete lines
+          const lines = buffer.split('\n')
+          buffer = lines.pop() || "" // Keep incomplete line in buffer
+
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              const dataStr = line.slice(6)
+              if (dataStr.trim()) {
+                try {
+                  const data = JSON.parse(dataStr)
+                  
+                  if (data.type === 'content' && data.content) {
+                    // Only update if content actually changed
+                    if (data.content !== lastContent) {
+                      lastContent = data.content
+                      setChatMessages((prev) => {
+                        const messages = [...prev]
+                        messages[messages.length - 1] = {
+                          ...messages[messages.length - 1],
+                          role: "system",
+                          content: data.content,
+                          isStreaming: true,
+                          visualization: lastVisualization,
+                        }
+                        return messages
+                      })
+                    }
+                  } else if (data.type === 'visualization' && data.visualization) {
+                    // Store visualization data
+                    console.log('Received visualization data:', data.visualization)
+                    lastVisualization = data.visualization
+                    setChatMessages((prev) => {
+                      const messages = [...prev]
+                      messages[messages.length - 1] = {
+                        ...messages[messages.length - 1],
+                        visualization: data.visualization,
+                      }
+                      return messages
+                    })
+                  } else if (data.type === 'done') {
+                    // Streaming complete
+                    console.log('Stream complete with visualization:', lastVisualization)
+                    setChatMessages((prev) => {
+                      const messages = [...prev]
+                      messages[messages.length - 1] = {
+                        ...messages[messages.length - 1],
+                        role: "system",
+                        content: lastContent || "I've completed the analysis.",
+                        isStreaming: false,
+                        visualization: lastVisualization,
+                      }
+                      console.log('Final message with viz:', messages[messages.length - 1])
+                      return messages
+                    })
+                  } else if (data.error) {
+                    throw new Error(data.error)
+                  }
+                } catch (parseError) {
+                  console.warn('Failed to parse SSE data:', dataStr, parseError)
+                }
+              }
+            }
+          }
         }
-      } else if (chatInput.toLowerCase().includes("report") || chatInput.toLowerCase().includes("generate")) {
-        response = {
-          role: "system",
-          content:
-            "I've generated a comprehensive sales performance report for Q2 2023. Key findings include:\n\n" +
-            "• Overall revenue increased by 8.2% compared to Q1\n" +
-            "• Customer acquisition cost decreased by 12%\n" +
-            "• Product category A showed the strongest growth at 15%\n" +
-            "• Geographic region East underperformed with a 3% decline\n\n" +
-            "The full report is available for download.",
-          attachment: "report",
+        
+        // Process any remaining buffer
+        if (buffer.trim() && buffer.startsWith('data: ')) {
+          const dataStr = buffer.slice(6)
+          try {
+            const data = JSON.parse(dataStr)
+            if (data.type === 'content' && data.content) {
+              setChatMessages((prev) => {
+                const messages = [...prev]
+                messages[messages.length - 1] = {
+                  role: "system",
+                  content: data.content,
+                  isStreaming: false,
+                }
+                return messages
+              })
+            }
+          } catch (e) {
+            // Ignore incomplete JSON
+          }
         }
-      } else if (chatInput.toLowerCase().includes("customer") && chatInput.toLowerCase().includes("segment")) {
-        response = {
-          role: "system",
-          content:
-            "I've analyzed your customer segments and identified 4 distinct groups:\n\n" +
-            "• Premium Loyalists (18%): High-value, frequent purchasers\n" +
-            "• Value Seekers (42%): Price-sensitive, occasional buyers\n" +
-            "• New Explorers (24%): Recent customers still exploring your offerings\n" +
-            "• At-Risk (16%): Showing declining engagement patterns\n\n" +
-            "Here's the customer segment distribution:",
-          attachment: "pie",
+      }
+
+      // Mark streaming as complete
+      setChatMessages((prev) => {
+        const messages = [...prev]
+        if (messages[messages.length - 1]?.isStreaming) {
+          messages[messages.length - 1] = {
+            ...messages[messages.length - 1],
+            isStreaming: false,
+          }
         }
+        return messages
+      })
+    } catch (error: any) {
+      if (error.name === 'AbortError') {
+        console.log('Request was aborted')
       } else {
-        response = {
-          role: "system",
-          content:
-            "I've analyzed your question and can provide insights based on your business data. Would you like me to generate a report, suggest actions, or provide more specific analysis on this topic?",
-        }
+        console.error('Error streaming response:', error)
+        setChatMessages((prev) => {
+          const messages = [...prev]
+          messages[messages.length - 1] = {
+            role: "system",
+            content: "I encountered an error while processing your request. Please try again.",
+            isStreaming: false,
+          }
+          return messages
+        })
       }
-
-      setChatMessages((prev) => [...prev, response])
+    } finally {
       setIsTyping(false)
-    }, 1500)
+      abortControllerRef.current = null
+    }
   }
 
-  const renderAttachment = (type: "chart" | "report" | "pie" | "bar" | null) => {
-    switch (type) {
-      case "chart":
+  const extractVisualizationFromContent = (content: string): { text: string; visualization: any } => {
+    // Check if content contains visualization markers
+    if (content.includes('**Pie Chart Data:**')) {
+      // Extract pie chart data
+      const lines = content.split('\n')
+      const data: any[] = []
+      let inPieSection = false
+      
+      for (const line of lines) {
+        if (line.includes('**Pie Chart Data:**')) {
+          inPieSection = true
+        } else if (line.startsWith('•') && inPieSection) {
+          const match = line.match(/• (.+): ([\d,]+) \(([\d.]+)%\)/)
+          if (match) {
+            data.push({
+              label: match[1],
+              value: parseInt(match[2].replace(/,/g, '')),
+              percentage: parseFloat(match[3])
+            })
+          }
+        } else if (line.startsWith('##') || line.startsWith('**') && !line.includes('Pie Chart')) {
+          inPieSection = false
+        }
+      }
+      
+      if (data.length > 0) {
+        return {
+          text: content,
+          visualization: { type: 'pie', data }
+        }
+      }
+    }
+
+    if (content.includes('**Bar Chart Data:**')) {
+      // Extract bar chart data
+      const lines = content.split('\n')
+      const data: any[] = []
+      let inBarSection = false
+      
+      for (const line of lines) {
+        if (line.includes('**Bar Chart Data:**')) {
+          inBarSection = true
+        } else if (inBarSection && line.includes(':')) {
+          const match = line.match(/(.+): .* ([\d,]+)/)
+          if (match) {
+            data.push({
+              label: match[1].trim(),
+              value: parseInt(match[2].replace(/,/g, ''))
+            })
+          }
+        }
+      }
+      
+      if (data.length > 0) {
+        return {
+          text: content,
+          visualization: { type: 'bar', data }
+        }
+      }
+    }
+
+    return { text: content, visualization: null }
+  }
+
+  const renderMessage = (message: ChatMessage) => {
+    // Use visualization data from message if available, otherwise try to extract from content
+    const visualizationToRender = message.visualization || extractVisualizationFromContent(message.content).visualization
+    console.log('Rendering message with visualization:', visualizationToRender)
+    
+    return (
+      <>
+        <div className="whitespace-pre-wrap text-sm">
+          {message.role === "system" ? (
+            <div className="prose prose-sm prose-invert max-w-none">
+              <ReactMarkdown 
+                components={{
+                h2: ({ children }) => <h2 className="text-lg font-bold mt-2 mb-1 text-purple-400">{children}</h2>,
+                h3: ({ children }) => <h3 className="text-md font-semibold mt-2 mb-1 text-blue-400">{children}</h3>,
+                strong: ({ children }) => <strong className="text-white font-semibold">{children}</strong>,
+                ul: ({ children }) => <ul className="list-disc list-inside space-y-1 my-2">{children}</ul>,
+                li: ({ children }) => <li className="text-slate-300">{children}</li>,
+                p: ({ children }) => <p className="my-1">{children}</p>,
+                code: ({ children, className }) => {
+                  const isBlock = className?.includes('language-')
+                  return isBlock ? (
+                    <pre className="bg-slate-800 rounded p-2 overflow-x-auto my-2">
+                      <code className="text-xs text-green-400">{children}</code>
+                    </pre>
+                  ) : (
+                    <code className="bg-slate-700 px-1 rounded text-xs">{children}</code>
+                  )
+                },
+                table: ({ children }) => (
+                  <div className="overflow-x-auto my-2">
+                    <table className="min-w-full text-xs">{children}</table>
+                  </div>
+                ),
+                thead: ({ children }) => <thead className="border-b border-slate-600">{children}</thead>,
+                tbody: ({ children }) => <tbody>{children}</tbody>,
+                tr: ({ children }) => <tr className="border-b border-slate-700">{children}</tr>,
+                th: ({ children }) => <th className="px-2 py-1 text-left text-purple-400">{children}</th>,
+                td: ({ children }) => <td className="px-2 py-1">{children}</td>,
+                blockquote: ({ children }) => (
+                  <blockquote className="border-l-4 border-purple-500 pl-3 my-2 italic text-slate-400">
+                    {children}
+                  </blockquote>
+                ),
+                details: ({ children }) => (
+                  <details className="my-2 bg-slate-800/50 rounded p-2">
+                    {children}
+                  </details>
+                ),
+                summary: ({ children }) => (
+                  <summary className="cursor-pointer text-purple-400 hover:text-purple-300">
+                    {children}
+                  </summary>
+                ),
+              }}
+            >
+              {message.content}
+            </ReactMarkdown>
+            </div>
+          ) : (
+            message.content
+          )}
+        </div>
+        {visualizationToRender && renderVisualization(visualizationToRender)}
+        {message.isStreaming && (
+          <div className="flex space-x-1 mt-2">
+            <div className="h-2 w-2 rounded-full bg-purple-500 animate-bounce"></div>
+            <div className="h-2 w-2 rounded-full bg-purple-500 animate-bounce delay-100"></div>
+            <div className="h-2 w-2 rounded-full bg-purple-500 animate-bounce delay-200"></div>
+          </div>
+        )}
+      </>
+    )
+  }
+
+  const renderVisualization = (visualization: any) => {
+    console.log('renderVisualization called with:', visualization)
+    if (!visualization) {
+      console.log('No visualization data')
+      return null
+    }
+
+    console.log('Visualization type:', visualization.type)
+    switch (visualization.type) {
+      case 'pie':
+        console.log('Rendering pie chart with data:', visualization.data)
         return (
-          <div className="mt-2 bg-slate-800/30 rounded-lg border border-indigo-700/50 p-3">
-            <div className="h-[150px]">
-              <LineChart
-                color="#c44ed9"
-                data={[
-                  { month: "JAN", value: 100 },
-                  { month: "FEB", value: 85 },
-                  { month: "MAR", value: 90 },
-                  { month: "APR", value: 75 },
-                  { month: "MAY", value: 65 },
-                  { month: "JUN", value: 60 },
-                ]}
-              />
-            </div>
-            <div className="text-xs text-center mt-2 text-slate-400">Sales Trend (Last 6 Months)</div>
-            <div className="mt-3 pt-2 border-t border-indigo-700/30">
-              <div className="text-xs text-slate-400 mb-2">
-                <span className="font-medium text-purple-400">Quick Insight:</span> Sales decline accelerated in
-                May-June
-              </div>
-              <div className="text-xs text-slate-400 mb-2 flex items-start">
-                <span className="font-medium text-green-400 mr-1">AI Recommendation:</span>
-                <span>Launch targeted promotion to top 20% customers to reverse trend within 30 days</span>
-              </div>
-              <Button
-                size="sm"
-                variant="outline"
-                className="w-full text-xs bg-slate-800/50 border-indigo-700/30 text-slate-200 hover:bg-slate-700/50"
-              >
-                Get Detailed Analysis
-              </Button>
-            </div>
+          <div className="mt-3 bg-slate-800/30 rounded-lg border border-indigo-700/50 p-4">
+            <SimplePieChart 
+              data={visualization.data.map((item: any) => ({
+                label: item.label || 'Unknown',
+                value: item.value || 0,
+                percentage: item.percentage
+              }))}
+              size={180}
+            />
           </div>
         )
-      case "bar":
+      
+      case 'bar':
+        console.log('Rendering bar chart with data:', visualization.data)
+        const barData = visualization.data.map((item: any) => ({
+          country: String(item.label || item.category || item.name || item.owner_name || item[Object.keys(item)[0]] || 'Unknown'),
+          value: Number(item.value || item.count || item.total || item.total_value || item.deal_count || item[Object.keys(item)[1]] || 0)
+        }))
+        console.log('Mapped bar data:', barData)
         return (
-          <div className="mt-2 bg-slate-800/30 rounded-lg border border-indigo-700/50 p-3">
-            <div className="h-[150px]">
+          <div className="mt-3 bg-slate-800/30 rounded-lg border border-indigo-700/50 p-3">
+            <div className="h-[200px]">
               <BarChart
                 color="#3b82f6"
-                data={[
-                  { country: "Email", value: 45 },
-                  { country: "Social", value: 25 },
-                  { country: "Search", value: 65 },
-                  { country: "Direct", value: 30 },
-                  { country: "Affiliate", value: 15 },
-                ]}
+                data={barData}
+                minimal={true}
               />
             </div>
-            <div className="text-xs text-center mt-2 text-slate-400">Revenue Opportunity by Channel ($K)</div>
-            <div className="mt-3 pt-2 border-t border-indigo-700/30">
-              <div className="text-xs text-slate-400 mb-2">
-                <span className="font-medium text-blue-400">Quick Insight:</span> Search channel offers highest ROI
-                potential
-              </div>
-              <div className="text-xs text-slate-400 mb-2 flex items-start">
-                <span className="font-medium text-green-400 mr-1">AI Recommendation:</span>
-                <span>Shift 30% of social budget to search for estimated 42% ROI increase</span>
-              </div>
-              <Button
-                size="sm"
-                variant="outline"
-                className="w-full text-xs bg-slate-800/50 border-indigo-700/30 text-slate-200 hover:bg-slate-700/50"
-              >
-                Create Action Plan
-              </Button>
-            </div>
           </div>
         )
-      case "report":
+      
+      case 'line':
+        console.log('Rendering line chart with data:', visualization.data)
+        // Map the data correctly - the backend sends x,y format
+        const lineData = visualization.data.map((item: any) => ({
+          month: String(item.x || item.label || item.month || item.date || 'Unknown'),
+          value: Number(item.y || item.value || item.count || item.total || 0)
+        }))
+        console.log('Mapped line data:', lineData)
         return (
-          <div className="mt-2 bg-slate-800/30 rounded-lg border border-indigo-700/50 p-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center">
-                <FileText className="h-5 w-5 text-blue-400 mr-2" />
-                <div>
-                  <div className="text-sm font-medium text-white">Q2_2023_Sales_Performance.pdf</div>
-                  <div className="text-xs text-slate-400">Generated today at 10:45 AM</div>
-                </div>
-              </div>
-              <Button size="sm" className="bg-blue-600 hover:bg-blue-700">
-                Download
-              </Button>
+          <div className="mt-3 bg-slate-800/30 rounded-lg border border-indigo-700/50 p-3">
+            <div className="h-[200px]">
+              <LineChart
+                color="#10b981"
+                data={lineData}
+                minimal={true}
+              />
             </div>
           </div>
         )
-      case "pie":
+      
+      case 'table':
+        console.log('Rendering table with data:', visualization.data)
         return (
-          <div className="mt-2 bg-slate-800/30 rounded-lg border border-indigo-700/50 p-3">
-            <div className="flex justify-center">
-              <div className="relative h-[150px] w-[150px]">
-                {/* Simple pie chart visualization */}
-                <div className="absolute inset-0 rounded-full border-8 border-purple-500 opacity-20"></div>
-                <div className="absolute inset-0 rounded-full border-8 border-transparent border-t-purple-500 border-r-purple-500 border-b-purple-500"></div>
-                <div
-                  className="absolute inset-0 rounded-full border-8 border-transparent border-t-blue-500 border-r-blue-500"
-                  style={{ clipPath: "polygon(50% 0, 100% 0, 100% 50%, 50% 50%)" }}
-                ></div>
-                <div
-                  className="absolute inset-0 rounded-full border-8 border-transparent border-t-teal-500"
-                  style={{ clipPath: "polygon(50% 0, 75% 0, 50% 50%)" }}
-                ></div>
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <PieChart className="h-8 w-8 text-slate-400" />
-                </div>
-              </div>
-            </div>
-            <div className="text-xs text-center mt-2 text-slate-400">Customer Segment Distribution</div>
-            <div className="flex justify-center mt-2 space-x-3 text-xs">
-              <div className="flex items-center">
-                <div className="h-2 w-2 bg-purple-500 rounded-full mr-1"></div>
-                <span>Premium</span>
-              </div>
-              <div className="flex items-center">
-                <div className="h-2 w-2 bg-blue-500 rounded-full mr-1"></div>
-                <span>Value</span>
-              </div>
-              <div className="flex items-center">
-                <div className="h-2 w-2 bg-teal-500 rounded-full mr-1"></div>
-                <span>New</span>
-              </div>
-              <div className="flex items-center">
-                <div className="h-2 w-2 bg-amber-500 rounded-full mr-1"></div>
-                <span>At-Risk</span>
-              </div>
-            </div>
-            <div className="mt-3 pt-2 border-t border-indigo-700/30">
-              <div className="text-xs text-slate-400 mb-2">
-                <span className="font-medium text-purple-400">Quick Insight:</span> Value Seekers segment growing
-                fastest
-              </div>
-              <div className="text-xs text-slate-400 mb-2 flex items-start">
-                <span className="font-medium text-green-400 mr-1">AI Recommendation:</span>
-                <span>Create tiered loyalty program to convert Value Seekers to Premium (est. 18% conversion)</span>
-              </div>
-              <Button
-                size="sm"
-                variant="outline"
-                className="w-full text-xs bg-slate-800/50 border-indigo-700/30 text-slate-200 hover:bg-slate-700/50"
-              >
-                Target This Segment
-              </Button>
+          <div className="mt-3 bg-slate-800/30 rounded-lg border border-indigo-700/50 p-3">
+            <SimpleTable 
+              data={visualization.data}
+              columns={visualization.columns}
+            />
+          </div>
+        )
+      
+      case 'scatter':
+        console.log('Rendering scatter plot with data:', visualization.data)
+        // For now, we'll use a line chart without lines for scatter
+        return (
+          <div className="mt-3 bg-slate-800/30 rounded-lg border border-indigo-700/50 p-3">
+            <div className="h-[200px]">
+              <LineChart
+                color="#f59e0b"
+                data={visualization.data.map((item: any) => ({
+                  month: String(item.x || item.label || 'Unknown'),
+                  value: item.y || item.value || 0
+                }))}
+                minimal={true}
+              />
             </div>
           </div>
         )
+      
       default:
+        console.log('Unknown visualization type:', visualization.type)
         return null
     }
   }
@@ -339,9 +539,9 @@ export function AskAndi({ isOpen, onClose }: AskAndiProps) {
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: 20, scale: 0.95 }}
           transition={{ duration: 0.2 }}
-          className="fixed bottom-20 right-6 w-[90vw] sm:w-[400px] z-50"
+          className="fixed bottom-20 right-6 w-[90vw] sm:w-[450px] z-50"
         >
-          <Card className="backdrop-blur-md bg-slate-900/80 border-indigo-700/40 shadow-xl h-[500px] overflow-hidden rounded-2xl">
+          <Card className="backdrop-blur-md bg-slate-900/95 border-indigo-700/40 shadow-xl h-[600px] overflow-hidden rounded-2xl">
             <CardHeader className="border-b border-indigo-700/30 pb-3">
               <div className="flex items-center justify-between">
                 <CardTitle className="text-slate-100 flex items-center">
@@ -351,7 +551,7 @@ export function AskAndi({ isOpen, onClose }: AskAndiProps) {
                 <div className="flex items-center gap-2">
                   <Badge variant="outline" className="bg-slate-800/50 text-purple-400 border-purple-500/50 text-xs">
                     <div className="h-1.5 w-1.5 rounded-full bg-purple-500 mr-1 animate-pulse"></div>
-                    ONLINE
+                    LIVE DATA
                   </Badge>
                   <Button
                     variant="ghost"
@@ -374,12 +574,11 @@ export function AskAndi({ isOpen, onClose }: AskAndiProps) {
                           message.role === "user" ? "bg-purple-500/20 text-white" : "bg-slate-800/50 text-slate-200"
                         }`}
                       >
-                        <div className="whitespace-pre-line text-sm">{message.content}</div>
-                        {message.attachment && renderAttachment(message.attachment)}
+                        {renderMessage(message)}
                       </div>
                     </div>
                   ))}
-                  {isTyping && (
+                  {isTyping && !chatMessages[chatMessages.length - 1]?.isStreaming && (
                     <div className="flex justify-start">
                       <div className="max-w-[90%] rounded-lg p-3 bg-slate-800/50 text-slate-200">
                         <div className="flex space-x-1">
@@ -395,19 +594,21 @@ export function AskAndi({ isOpen, onClose }: AskAndiProps) {
               <div className="p-4 border-t border-indigo-700/30">
                 <form onSubmit={handleChatSubmit} className="flex space-x-2">
                   <input
-                    placeholder="Ask ANDI anything..."
+                    placeholder="Ask about your business data..."
                     value={chatInput}
                     onChange={(e) => setChatInput(e.target.value)}
-                    className="flex-1 bg-slate-800/50 border-indigo-700/30 text-white rounded-md px-3 py-2 focus:outline-none focus:ring-1 focus:ring-purple-500"
+                    disabled={isTyping}
+                    className="flex-1 bg-slate-800/50 border-indigo-700/30 text-white rounded-md px-3 py-2 focus:outline-none focus:ring-1 focus:ring-purple-500 disabled:opacity-50"
                   />
                   <Button
                     type="button"
                     onClick={toggleListening}
-                    className={`${isListening ? "bg-red-600 hover:bg-red-700" : "bg-blue-600 hover:bg-blue-700"}`}
+                    disabled={isTyping}
+                    className={`${isListening ? "bg-red-600 hover:bg-red-700" : "bg-blue-600 hover:bg-blue-700"} disabled:opacity-50`}
                   >
                     <Mic className={`h-4 w-4 ${isListening ? "animate-pulse" : ""}`} />
                   </Button>
-                  <Button type="submit" className="bg-purple-600 hover:bg-purple-700">
+                  <Button type="submit" disabled={isTyping} className="bg-purple-600 hover:bg-purple-700 disabled:opacity-50">
                     <Send className="h-4 w-4" />
                   </Button>
                 </form>
@@ -419,4 +620,3 @@ export function AskAndi({ isOpen, onClose }: AskAndiProps) {
     </AnimatePresence>
   )
 }
-

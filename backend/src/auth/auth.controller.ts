@@ -32,7 +32,7 @@ export class AuthController {
     return { 
       success: true, 
       message: 'Logged out successfully',
-      userId: req.user.sub 
+      userId: req.user.id || req.user.sub 
     }
   }
 }

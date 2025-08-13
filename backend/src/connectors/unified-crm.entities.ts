@@ -31,6 +31,13 @@ export class CrmContact {
   @Column() provider!: CrmProvider
   @Column() connectorId!: string
   @Index() @Column({ nullable: true }) externalId?: string
+  
+  // Foreign key relationships
+  @ManyToOne(() => CrmAccount, { nullable: true })
+  account?: CrmAccount
+  @Column({ nullable: true })
+  accountId?: string
+  
   @CreateDateColumn() createdAt!: Date
   @UpdateDateColumn() updatedAt!: Date
 }
@@ -46,6 +53,18 @@ export class CrmDeal {
   @Column() provider!: CrmProvider
   @Column() connectorId!: string
   @Index() @Column({ nullable: true }) externalId?: string
+  
+  // Foreign key relationships
+  @ManyToOne(() => CrmAccount, { nullable: true })
+  account?: CrmAccount
+  @Column({ nullable: true })
+  accountId?: string
+  
+  @ManyToOne(() => CrmContact, { nullable: true })
+  contact?: CrmContact
+  @Column({ nullable: true })
+  contactId?: string
+  
   @CreateDateColumn() createdAt!: Date
   @UpdateDateColumn() updatedAt!: Date
 }
@@ -61,6 +80,18 @@ export class CrmActivity {
   @Column() provider!: CrmProvider
   @Column() connectorId!: string
   @Index() @Column({ nullable: true }) externalId?: string
+  
+  // Foreign key relationships
+  @ManyToOne(() => CrmDeal, { nullable: true })
+  deal?: CrmDeal
+  @Column({ nullable: true })
+  dealId?: string
+  
+  @ManyToOne(() => CrmContact, { nullable: true })
+  contact?: CrmContact
+  @Column({ nullable: true })
+  contactId?: string
+  
   @CreateDateColumn() createdAt!: Date
   @UpdateDateColumn() updatedAt!: Date
 }

@@ -1,6 +1,6 @@
 import { Injectable, UnauthorizedException, BadRequestException } from '@nestjs/common'
 import { InjectRepository } from '@nestjs/typeorm'
-import { Repository } from 'typeorm'
+import { Repository, In } from 'typeorm'
 import { JwtService } from '@nestjs/jwt'
 import { User } from '../users/user.entity'
 import { Tenant } from '../tenancy/tenant.entity'
@@ -50,6 +50,15 @@ export class AuthService {
     if (!adminRole) {
       adminRole = this.roleRepo.create({ name: 'admin', tenant, permissions })
       await this.roleRepo.save(adminRole)
+    }
+
+    // Also create a basic user role for the tenant
+    let userRole = await this.roleRepo.findOne({ where: { name: 'user', tenant: { id: tenant.id } } })
+    if (!userRole) {
+      // Create user role with limited permissions
+      const userPermissions = await this.permRepo.find({ where: { key: In(['users.read', 'crm.read']) } })
+      userRole = this.roleRepo.create({ name: 'user', tenant, permissions: userPermissions })
+      await this.roleRepo.save(userRole)
     }
 
     const adminUser = this.userRepo.create({ email: dto.adminEmail, name: dto.adminName, tenant, role: adminRole })

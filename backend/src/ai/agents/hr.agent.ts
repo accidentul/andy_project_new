@@ -162,4 +162,15 @@ Always consider:
 
     return actions
   }
+
+  async processQuery(query: string, context: AgentContext): Promise<import("./base.agent").AgentResponse> {
+    const analysis = `Processing query: ${query}`
+    const actions = this.generateActions(context, analysis)
+    return {
+      content: analysis,
+      actions,
+      suggestions: [],
+      confidence: 0.85
+    }
+  }
 }

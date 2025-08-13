@@ -28,36 +28,37 @@ export function StreamingChat({ query, onComplete, onError }: StreamingChatProps
         const token = getAuthToken()
         const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:4000"
         
-        // Create EventSource for SSE
-        const eventSource = new EventSource(
-          `${baseUrl}/api/ai/chat/stream?query=${encodeURIComponent(query)}`,
-          {
-            withCredentials: true,
-            headers: {
-              Authorization: `Bearer ${token}`,
-            } as any, // EventSource doesn't directly support headers, would need polyfill
-          }
-        )
+        // Create EventSource for SSE - pass token as query param since EventSource doesn't support headers
+        const params = new URLSearchParams({
+          query: query,
+          token: token || ''
+        })
+        const eventSource = new EventSource(`${baseUrl}/api/ai/chat/stream?${params}`)
 
         eventSourceRef.current = eventSource
 
         eventSource.onmessage = (event) => {
           try {
-            const data = JSON.parse(event.data)
-            
-            if (data.type === "content") {
-              setStreamedContent((prev) => prev + data.content)
-            } else if (data.type === "done") {
+            // Check for completion signal
+            if (event.data === '[DONE]') {
               setIsStreaming(false)
               eventSource.close()
               if (onComplete) {
                 onComplete(streamedContent)
               }
-            } else if (data.type === "error") {
+              return
+            }
+            
+            const data = JSON.parse(event.data)
+            
+            // Handle our backend's response format
+            if (data.response) {
+              setStreamedContent(data.response)
+            } else if (data.error) {
               setIsStreaming(false)
               eventSource.close()
               if (onError) {
-                onError(data.message || "Streaming error occurred")
+                onError(data.error)
               }
             }
           } catch (error) {

@@ -21,7 +21,15 @@ export class UsersController {
   @UsePipes(new ValidationPipe({ whitelist: true, transform: true }))
   async createUser(@Req() req: any, @Body() dto: CreateUserDto) {
     const tenantId = req.user.tenantId as string
-    return this.usersService.createUserWithinTenant({ tenantId, email: dto.email, name: dto.name, password: dto.password, roleId: dto.roleId })
+    return this.usersService.createUserWithinTenant({ 
+      tenantId, 
+      email: dto.email, 
+      name: dto.name, 
+      password: dto.password, 
+      roleId: dto.roleId,
+      roleTitle: dto.roleTitle,
+      department: dto.department
+    })
   }
 
   @RequirePermissions('roles.manage')

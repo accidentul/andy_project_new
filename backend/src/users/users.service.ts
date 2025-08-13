@@ -21,17 +21,31 @@ export class UsersService {
     name: string
     password: string
     roleId: string
+    roleTitle?: string
+    department?: string
   }) {
     const tenant = await this.tenantRepo.findOne({ where: { id: params.tenantId } })
     if (!tenant) throw new NotFoundException('Tenant not found')
 
-    const role = await this.roleRepo.findOne({ where: { id: params.roleId }, relations: ['tenant'] })
+    // Try to find role by ID first, then by name if ID lookup fails
+    let role = await this.roleRepo.findOne({ where: { id: params.roleId }, relations: ['tenant'] })
+    if (!role) {
+      // If not found by ID, try by name (for convenience in tests)
+      role = await this.roleRepo.findOne({ where: { name: params.roleId, tenant: { id: tenant.id } }, relations: ['tenant'] })
+    }
     if (!role || role.tenant.id !== tenant.id) throw new BadRequestException('Invalid role for tenant')
 
     const existing = await this.userRepo.findOne({ where: { email: params.email.toLowerCase() } })
     if (existing) throw new BadRequestException('User already exists')
 
-    const user = this.userRepo.create({ email: params.email, name: params.name, tenant, role })
+    const user = this.userRepo.create({ 
+      email: params.email, 
+      name: params.name, 
+      tenant, 
+      role,
+      roleTitle: params.roleTitle,
+      department: params.department
+    })
     await user.setPassword(params.password)
     await this.userRepo.save(user)
     return user

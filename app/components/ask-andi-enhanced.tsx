@@ -45,6 +45,7 @@ export function AskAndiEnhanced({ isOpen, onClose }: AskAndiEnhancedProps) {
   const [isListening, setIsListening] = useState(false)
   const [conversationId, setConversationId] = useState<string | null>(null)
   const [suggestedActions, setSuggestedActions] = useState<AgentAction[]>([])
+  const [followUpSuggestions, setFollowUpSuggestions] = useState<string[]>([])
   const [uploadedFile, setUploadedFile] = useState<File | null>(null)
   const chatContainerRef = useRef<HTMLDivElement>(null)
   const recognitionRef = useRef<SpeechRecognition | null>(null)
@@ -202,6 +203,9 @@ export function AskAndiEnhanced({ isOpen, onClose }: AskAndiEnhancedProps) {
     const query = chatInput
     setChatInput("")
     setIsTyping(true)
+    
+    // Clear previous follow-up suggestions
+    setFollowUpSuggestions([])
 
     try {
       // Use streaming endpoint for typewriter effect
@@ -223,7 +227,7 @@ export function AskAndiEnhanced({ isOpen, onClose }: AskAndiEnhancedProps) {
         `${streamUrl}?${new URLSearchParams({
           query: query,
           conversationId: conversationId || '',
-          token: localStorage.getItem('token') || ''
+          token: localStorage.getItem('andi_token') || ''
         })}`
       )
       
@@ -231,9 +235,27 @@ export function AskAndiEnhanced({ isOpen, onClose }: AskAndiEnhancedProps) {
         try {
           const data = JSON.parse(event.data)
           
+          if (data.type === 'done') {
+            eventSource.close()
+            setIsTyping(false)
+            return
+          }
+          
+          if (data.type === 'thinking' || data.type === 'processing') {
+            // Show thinking/processing indicators
+            setChatMessages((prev) => {
+              const newMessages = [...prev]
+              if (newMessages[assistantMessageIndex]) {
+                newMessages[assistantMessageIndex].content = `${data.message || 'Processing...'}`
+              }
+              return newMessages
+            })
+            return
+          }
+          
           if (data.type === 'content') {
-            // Append content with typewriter effect
-            assistantContent += data.content
+            // Handle streaming content - accumulate the text
+            assistantContent = data.content || data.response || ''
             setChatMessages((prev) => {
               const newMessages = [...prev]
               if (newMessages[assistantMessageIndex]) {
@@ -241,31 +263,77 @@ export function AskAndiEnhanced({ isOpen, onClose }: AskAndiEnhancedProps) {
               }
               return newMessages
             })
-          } else if (data.type === 'actions') {
-            // Update actions when received
-            setChatMessages((prev) => {
-              const newMessages = [...prev]
-              if (newMessages[assistantMessageIndex]) {
-                newMessages[assistantMessageIndex].actions = data.actions
-              }
-              return newMessages
-            })
-          } else if (data.type === 'done') {
-            // Streaming complete
-            eventSource.close()
-            setIsTyping(false)
-            
-            // Set conversation ID if provided
-            if (data.conversationId && !conversationId) {
-              setConversationId(data.conversationId)
+            return
+          }
+          
+          if (data.type === 'metrics') {
+            // Handle metrics data - could be used for future enhancements
+            console.log('Received metrics:', data.metrics)
+            return
+          }
+          
+          if (data.type === 'suggestions') {
+            // Handle follow-up question suggestions
+            console.log('Follow-up suggestions:', data.questions)
+            if (data.questions && Array.isArray(data.questions)) {
+              setFollowUpSuggestions(data.questions)
             }
-          } else if (data.type === 'error') {
+            return
+          }
+          
+          if (data.type === 'summary') {
+            // Handle summary data
+            console.log('Received summary:', data.summary)
+            return
+          }
+          
+          if (data.type === 'error') {
             console.error('Streaming error:', data.message)
             eventSource.close()
             setIsTyping(false)
+            setChatMessages((prev) => {
+              const newMessages = [...prev]
+              if (newMessages[assistantMessageIndex]) {
+                newMessages[assistantMessageIndex].content = `Error: ${data.message || 'Unknown error occurred'}`
+              }
+              return newMessages
+            })
+            return
+          }
+          
+          // Handle legacy response format (fallback)
+          if (data.response) {
+            setChatMessages((prev) => {
+              const newMessages = [...prev]
+              if (newMessages[assistantMessageIndex]) {
+                newMessages[assistantMessageIndex].content = data.response
+                if (data.actions && data.actions.length > 0) {
+                  newMessages[assistantMessageIndex].actions = data.actions
+                }
+              }
+              return newMessages
+            })
+            
+            if (data.conversationId && !conversationId) {
+              setConversationId(data.conversationId)
+            }
+          }
+          
+          // Handle direct error in response
+          if (data.error) {
+            console.error('API error:', data.error)
+            eventSource.close()
+            setIsTyping(false)
+            setChatMessages((prev) => {
+              const newMessages = [...prev]
+              if (newMessages[assistantMessageIndex]) {
+                newMessages[assistantMessageIndex].content = `Error: ${data.error}`
+              }
+              return newMessages
+            })
           }
         } catch (error) {
-          console.error('Error parsing SSE data:', error)
+          console.error('Error parsing SSE data:', error, 'Raw data:', event.data)
         }
       }
       
@@ -274,8 +342,17 @@ export function AskAndiEnhanced({ isOpen, onClose }: AskAndiEnhancedProps) {
         eventSource.close()
         setIsTyping(false)
         
-        // Fallback to non-streaming API
-        fallbackToNonStreaming(query)
+        // Show a temporary error message and then fallback
+        setChatMessages((prev) => {
+          const newMessages = [...prev]
+          if (newMessages[assistantMessageIndex]) {
+            newMessages[assistantMessageIndex].content = "Connection interrupted, switching to fallback mode..."
+          }
+          return newMessages
+        })
+        
+        // Fallback to non-streaming API after a brief delay
+        setTimeout(() => fallbackToNonStreaming(query), 1000)
       }
       
     } catch (error) {
@@ -330,6 +407,16 @@ export function AskAndiEnhanced({ isOpen, onClose }: AskAndiEnhancedProps) {
     if (lower.includes('distribution') || lower.includes('segment')) return 'pie'
     if (lower.includes('comparison') || lower.includes('breakdown')) return 'bar'
     return null
+  }
+
+  const handleFollowUpClick = (suggestion: string) => {
+    setChatInput(suggestion)
+    // Auto-submit the suggestion
+    const fakeEvent = { preventDefault: () => {} } as React.FormEvent
+    setChatInput(suggestion)
+    setTimeout(() => {
+      handleChatSubmit(fakeEvent)
+    }, 100)
   }
 
   const renderAction = (action: AgentAction, index: number) => {
@@ -543,13 +630,38 @@ export function AskAndiEnhanced({ isOpen, onClose }: AskAndiEnhancedProps) {
                             <div className="h-2 w-2 rounded-full bg-purple-500 animate-bounce delay-100"></div>
                             <div className="h-2 w-2 rounded-full bg-purple-500 animate-bounce delay-200"></div>
                           </div>
-                          <span className="text-xs text-slate-400">Analyzing with AI...</span>
+                          <span className="text-xs text-slate-400">AI is thinking...</span>
                         </div>
                       </div>
                     </div>
                   )}
                 </div>
               </div>
+              
+              {/* Follow-up Suggestions */}
+              {followUpSuggestions.length > 0 && !isTyping && (
+                <div className="px-4 py-2 border-t border-indigo-700/30 bg-slate-800/20">
+                  <div className="text-xs text-slate-400 mb-2 flex items-center">
+                    <Sparkles className="h-3 w-3 mr-1" />
+                    Follow-up Questions
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    {followUpSuggestions.slice(0, 4).map((suggestion, idx) => (
+                      <Button
+                        key={idx}
+                        size="sm"
+                        variant="outline"
+                        className="text-xs text-left justify-start h-auto py-2 px-3 text-slate-300 border-indigo-700/30 hover:bg-indigo-700/20 hover:text-white whitespace-normal"
+                        onClick={() => handleFollowUpClick(suggestion)}
+                      >
+                        <span className="text-purple-400 mr-2">→</span>
+                        {suggestion}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              
               <div className="p-4 border-t border-indigo-700/30">
                 <div className="flex items-center gap-2 mb-2">
                   {uploadedFile && (

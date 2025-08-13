@@ -73,7 +73,7 @@ docker-compose up   # Start full stack with Docker
 - **Auth Module**: JWT authentication, multi-tenant registration
 - **Users Module**: User CRUD with role/permission management
 - **Connectors Module**: CRM integrations (Salesforce, HubSpot)
-- **AI Module**: Suggestions engine and data seeding capabilities
+- **AI Module**: AI agents with tool calling using Vercel AI SDK, real action execution, and data seeding
 
 ### Database Schema
 - **Users**: Multi-tenant users with roles and permissions
@@ -186,3 +186,43 @@ curl -X POST http://localhost:4000/auth/register-admin -H 'Content-Type: applica
 - ✅ Tests for backend API (unit + integration/e2e)
 - ✅ Frontend integration (if required) wired to real backend
 - ✅ Documentation for new env vars or scripts
+
+## AI Agent & Tool System
+
+### Architecture Overview
+The application uses **Vercel AI SDK** with custom tools and agents for AI functionality:
+- **Framework**: Vercel AI SDK (`ai` package) with OpenAI provider
+- **Tool System**: Custom tool framework with Zod validation
+- **Agents**: Role-based agents (CFO, Sales, Marketing, Operations, HR)
+- **Function Calling**: Native OpenAI function calling via Vercel AI SDK
+
+### Key Components
+- `src/ai/tools/base.tool.ts` - Base tool class with validation
+- `src/ai/tools/tool-registry.ts` - Tool management and role-based access
+- `src/ai/ai-agent.service.ts` - Agent orchestration with tools
+- `src/ai/agents/*.agent.ts` - Role-specific agent implementations
+
+### Available API Endpoints
+- `POST /api/ai/chat/agent` - Chat with agent using tools
+- `GET /api/ai/tools/available` - Get tools for user's role
+- `POST /api/ai/tools/execute` - Execute a specific tool
+- `GET /api/ai/agents/available` - List available agents
+
+### Tool Categories
+1. **CRM Tools**: Account/deal/activity management, pipeline analysis
+2. **Business Tools**: Report generation, meeting scheduling, email automation
+3. **Analytics Tools**: Data analysis, forecasting, anomaly detection
+
+### Adding New Tools
+1. Create tool class extending `BaseTool` in `src/ai/tools/`
+2. Define Zod schema for parameters
+3. Implement `execute()` method with real data operations
+4. Register in `ToolRegistry.initializeTools()`
+5. Configure role access in `ToolRegistry.configureRoleAccess()`
+
+### Important Notes
+- **NO LangChain** due to TypeScript compilation issues
+- Tools perform REAL actions with database operations
+- Role-based tool access control enforced
+- All tools use Zod for runtime validation
+- Streaming responses supported via Server-Sent Events

@@ -13,7 +13,7 @@ export interface ActionExecutionRequest {
     type: 'automation' | 'alert' | 'recommendation'
     title: string
     description: string
-    actionData: any
+    actionData?: any
   }
   user: User
   conversationId?: string

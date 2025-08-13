@@ -2,7 +2,6 @@ import { Injectable } from '@nestjs/common'
 import { InjectRepository } from '@nestjs/typeorm'
 import { Repository } from 'typeorm'
 import { CrmAccount, CrmActivity, CrmContact, CrmDeal } from '../connectors/unified-crm.entities'
-import { Tenant } from '../tenancy/tenant.entity'
 
 @Injectable()
 export class SeedDataService {
@@ -11,15 +10,11 @@ export class SeedDataService {
     @InjectRepository(CrmContact) private readonly contactRepo: Repository<CrmContact>,
     @InjectRepository(CrmDeal) private readonly dealRepo: Repository<CrmDeal>,
     @InjectRepository(CrmActivity) private readonly activityRepo: Repository<CrmActivity>,
-    @InjectRepository(Tenant) private readonly tenantRepo: Repository<Tenant>,
   ) {}
 
   async seedDashboardData(tenantId: string, connectorId: string, provider: 'salesforce' | 'hubspot') {
-    // Get tenant entity
-    const tenant = await this.tenantRepo.findOne({ where: { id: tenantId } })
-    if (!tenant) {
-      throw new Error('Tenant not found')
-    }
+    // For seed data, we'll just use the tenant ID directly
+    const tenant = { id: tenantId } as any
 
     // Clear existing data for this connector
     await this.accountRepo.delete({ connectorId })
@@ -49,7 +44,7 @@ export class SeedDataService {
       accounts.push(await this.accountRepo.save(account))
     }
 
-    // Seed Contacts
+    // Seed Contacts with account relationships
     const contacts = []
     const firstNames = ['John', 'Jane', 'Michael', 'Sarah', 'David', 'Emily', 'Robert', 'Lisa', 'James', 'Maria']
     const lastNames = ['Smith', 'Johnson', 'Williams', 'Brown', 'Jones', 'Garcia', 'Miller', 'Davis', 'Rodriguez', 'Martinez']
@@ -58,6 +53,7 @@ export class SeedDataService {
       const firstName = firstNames[i % firstNames.length]
       const lastName = lastNames[Math.floor(i / firstNames.length) % lastNames.length]
       const accountIndex = i % accounts.length
+      const account = accounts[accountIndex]
       
       const contact = this.contactRepo.create({
         tenant,
@@ -65,14 +61,18 @@ export class SeedDataService {
         connectorId,
         firstName,
         lastName,
-        email: `${firstName.toLowerCase()}.${lastName.toLowerCase()}${i}@${accounts[accountIndex].name.toLowerCase().replace(/\s+/g, '')}.com`,
+        email: `${firstName.toLowerCase()}.${lastName.toLowerCase()}${i}@${account.name.toLowerCase().replace(/\s+/g, '')}.com`,
         phone: `+1 555-${String(Math.floor(Math.random() * 900) + 100)}-${String(Math.floor(Math.random() * 9000) + 1000)}`,
         externalId: `con-${i + 1}`,
+        // Add foreign key relationship
+        accountId: account.id,
+        account: account,
       })
       contacts.push(await this.contactRepo.save(contact))
     }
 
-    // Seed Deals
+    // Seed Deals with account and contact relationships
+    const deals = []
     const dealNames = [
       'Enterprise License Deal', 'Cloud Migration Project', 'Annual Subscription Renewal',
       'Professional Services Package', 'Platform Integration', 'Custom Development',
@@ -88,20 +88,30 @@ export class SeedDataService {
       const closeDate = new Date(now)
       closeDate.setMonth(closeDate.getMonth() + monthsOffset)
       
+      const account = accounts[i % accounts.length]
+      // Get contacts for this account
+      const accountContacts = contacts.filter(c => c.accountId === account.id)
+      const contact = accountContacts.length > 0 ? accountContacts[Math.floor(Math.random() * accountContacts.length)] : contacts[i % contacts.length]
+      
       const deal = this.dealRepo.create({
         tenant,
         provider,
         connectorId,
-        name: `${dealNames[i % dealNames.length]} - ${accounts[i % accounts.length].name}`,
+        name: `${dealNames[i % dealNames.length]} - ${account.name}`,
         amount: Math.floor(Math.random() * 500000) + 10000,
         stage: stages[i % stages.length],
         closeDate: closeDate.toISOString().split('T')[0], // Format as date only
         externalId: `deal-${i + 1}`,
+        // Add foreign key relationships
+        accountId: account.id,
+        account: account,
+        contactId: contact.id,
+        contact: contact,
       })
-      await this.dealRepo.save(deal)
+      deals.push(await this.dealRepo.save(deal))
     }
 
-    // Seed Activities (last 30 days)
+    // Seed Activities with deal and contact relationships (last 30 days)
     const activityTypes = ['call', 'email', 'meeting', 'task']
     const subjects = [
       'Follow-up call', 'Product demo', 'Contract review', 'Quarterly check-in',
@@ -120,6 +130,13 @@ export class SeedDataService {
         const hour = 8 + Math.floor(Math.random() * 10) // 8 AM to 6 PM
         date.setHours(hour, Math.floor(Math.random() * 60), 0, 0)
         
+        // Randomly associate with a deal and contact
+        const deal = deals[Math.floor(Math.random() * deals.length)]
+        const contact = contacts[Math.floor(Math.random() * contacts.length)]
+        
+        const shouldLinkDeal = Math.random() > 0.5
+        const shouldLinkContact = Math.random() > 0.3
+        
         const activity = this.activityRepo.create({
           tenant,
           provider,
@@ -129,6 +146,9 @@ export class SeedDataService {
           occurredAt: date,
           notes: `Activity notes for ${date.toLocaleDateString()}`,
           externalId: `act-${daysAgo}-${j}`,
+          // Add foreign key relationships (50% chance for deal, 70% for contact)
+          dealId: shouldLinkDeal ? deal.id : undefined,
+          contactId: shouldLinkContact ? contact.id : undefined,
         })
         await this.activityRepo.save(activity)
       }

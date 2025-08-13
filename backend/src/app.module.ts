@@ -18,6 +18,7 @@ import { Role } from './rbac/role.entity'
 import { Permission } from './rbac/permission.entity'
 import { ConnectorsModule } from './connectors/connectors.module'
 import { AiModule } from './ai/ai.module'
+import { SeedModule } from './seed/seed.module'
 import { Connector } from './connectors/connector.entity'
 import { CrmAccount, CrmActivity, CrmContact, CrmDeal } from './connectors/unified-crm.entities'
 
@@ -36,6 +37,7 @@ import { CrmAccount, CrmActivity, CrmContact, CrmDeal } from './connectors/unifi
     UsersModule,
     ConnectorsModule,
     AiModule,
+    SeedModule,
   ],
 })
 export class AppModule {}

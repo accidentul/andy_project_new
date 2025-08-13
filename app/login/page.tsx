@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Brain, ArrowRight, Loader2 } from "lucide-react"
 import AnimatedBackground from "../components/animated-background"
@@ -32,12 +32,13 @@ export default function LoginPage() {
     }
   }
 
-  // Immediately redirect on successful login, skip loading screen
-  if (isLoggedIn) {
-    sessionStorage.setItem("fromLogin", "true")
-    router.push("/")
-    return null
-  }
+  // Redirect on successful login using useEffect to avoid render-time state updates
+  useEffect(() => {
+    if (isLoggedIn) {
+      sessionStorage.setItem("fromLogin", "true")
+      router.push("/")
+    }
+  }, [isLoggedIn, router])
 
   return (
     <div className="relative min-h-screen flex flex-col items-center justify-center overflow-hidden bg-black">
